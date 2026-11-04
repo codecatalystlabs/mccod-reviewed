@@ -1,0 +1,208 @@
+/* Download tile — sits in the home grid alongside form tiles */
+.download-tile {
+  position: relative;
+}
+
+@media (min-width: 900px) and (min-height: 640px) {
+  .download-tile {
+    grid-column: 3 / 4;
+  }
+}
+
+/* ── Drawer header ── */
+.dd-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 28px 28px 20px;
+  background: linear-gradient(135deg, #475569 0%, #1e293b 100%);
+  color: #fff;
+}
+
+.dd-header-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dd-title {
+  font-size: 20px;
+  font-weight: 800;
+  margin: 0 0 4px;
+  line-height: 1.2;
+}
+
+.dd-subtitle {
+  font-size: 13px;
+  margin: 0;
+  opacity: 0.85;
+  font-weight: 500;
+}
+
+/* ── Drawer body ── */
+.dd-body {
+  padding: 24px 28px 28px;
+  overflow-y: auto;
+  max-height: calc(100vh - 140px);
+}
+
+.dd-section {
+  margin-bottom: 4px;
+}
+
+.dd-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #64748b;
+  margin-bottom: 10px;
+}
+
+.dd-hint {
+  display: block;
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 6px;
+}
+
+/* ── Program chip grid ── */
+.dd-program-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dd-program-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+  font-size: 14px;
+  text-align: left;
+  width: 100%;
+}
+
+.dd-program-chip:hover {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.dd-program-chip.selected {
+  border-width: 2px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.dd-chip-label {
+  flex: 1;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+/* ── Org unit badge ── */
+.dd-org-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+/* ── Options row ── */
+.dd-options-row {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.dd-options-row > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ── Progress area ── */
+.dd-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.dd-progress-label {
+  display: block;
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+/* ── Error ── */
+.dd-error {
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+/* ── Summary ── */
+.dd-summary {
+  padding: 8px 0;
+  margin-bottom: 16px;
+}
+
+/* ── Actions bar ── */
+.dd-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 8px;
+}
+
+.dd-download-btn {
+  min-width: 180px;
+  font-weight: 700;
+  border-radius: 8px;
+  height: 44px;
+}
+
+/* ── Ant overrides inside drawer ── */
+.download-drawer .ant-drawer-body {
+  padding: 0;
+}
+
+.download-drawer .ant-radio-button-wrapper {
+  border-radius: 6px;
+}
+
+.download-drawer .ant-radio-button-wrapper:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.download-drawer .ant-radio-button-wrapper:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+.download-drawer .ant-progress-bg {
+  border-radius: 4px;
+}

@@ -30,7 +30,8 @@
       },
       {
        "de": "NEW_pdr_mother_nin",
-       "label": "1.1.3 Mother NIN"
+       "label": "1.1.3 Mother NIN",
+       "hint": "Used for this lookup. Saving the NIN requires a mapped DHIS2 data element."
       },
       {
        "de": "NEW_pdr_facility_level",
@@ -46,11 +47,11 @@
       },
       {
        "de": "t5nTEmlScSt",
-       "label": "Subcounty"
+       "label": "District"
       },
       {
        "de": "u44XP9fZweA",
-       "label": "District"
+       "label": "Subcounty"
       },
       {
        "de": "xpJgWYFpvht",
@@ -2076,6 +2077,10 @@
        "label": "Initials of Child Who Died"
       },
       {
+       "de": "mfR5fhnOQTA",
+       "label": "Date of death"
+      },
+      {
        "de": "CdceEuqRSwT",
        "label": "Age — days (only if under 1 month)"
       },
@@ -2126,10 +2131,6 @@
      "label": null,
      "fields": [
       {
-       "de": "mfR5fhnOQTA",
-       "label": "Date of Death"
-      },
-      {
        "de": "IGjo7hyxtxF",
        "label": "Time of Death (24hrs)"
       },
@@ -2147,11 +2148,11 @@
       },
       {
        "de": "xOyckoyi422",
-       "label": "If yes; referred from?"
+       "label": "Level or source of referral"
       },
       {
        "de": "g3yvhO9uFpI",
-       "label": "If referred from a health facility, name of the facility"
+       "label": "Name of the referring facility"
       }
      ]
     }
@@ -2166,6 +2167,10 @@
       {
        "de": "FX3mcSuvR3c",
        "label": "Major signs and symptoms at admission"
+      },
+      {
+       "de": "A5mxXfgcbvg",
+       "label": "History of previous admission in the past three months?"
       },
       {
        "de": "Lt6AEASiVsc",
@@ -2194,10 +2199,6 @@
       {
        "de": "QUMkGwjclEf",
        "label": "Diagnosis at admission"
-      },
-      {
-       "de": "A5mxXfgcbvg",
-       "label": "Had the child been an inpatient in the past three months?"
       }
      ]
     }
@@ -2207,7 +2208,7 @@
    "title": "SECTION FOUR: Maternal Risk Factors (skip if child age < 28 days)",
    "groups": [
     {
-     "label": "Antenatal care",
+     "label": "Antenatal Care History",
      "fields": [
       {
        "de": "tKPEnIA0OAy",
@@ -2215,7 +2216,7 @@
       },
       {
        "de": "xbxWKAsmIN0",
-       "label": "If yes, how many times?"
+       "label": "Number of antenatal care visits"
       },
       {
        "de": "JXTeTVgMDOB",
@@ -2223,7 +2224,7 @@
       },
       {
        "de": "DuFUOsHMvjZ",
-       "label": "Known conditions during pregnancy"
+       "label": "Known medical or social conditions during pregnancy"
       }
      ]
     },
@@ -2235,16 +2236,16 @@
        "label": "Weeks of amenorrhea at delivery"
       },
       {
-       "de": "ugiAlde4VrW",
-       "label": "Birth weight of the baby"
-      },
-      {
        "de": "waxR2t677eo",
        "label": "Place of delivery"
       },
       {
        "de": "TZCPZIB2vWU",
        "label": "Mode of delivery"
+      },
+      {
+       "de": "ugiAlde4VrW",
+       "label": "Birth weight of the baby"
       },
       {
        "de": "YK9bfWefUwX",
@@ -2430,7 +2431,7 @@
      "fields": [
       {
        "de": "gKNePs0u0k9",
-       "label": "Delay to seeking Health Care"
+       "label": "Delay in seeking care at a health facility"
       },
       {
        "de": "UXLAuJwpbRH",
@@ -2512,11 +2513,11 @@
      "fields": [
       {
        "de": "KTsOM19SKne",
-       "label": "Gap(s) identified"
+       "label": "Gap identified"
       },
       {
        "de": "uIQpaEB4DRt",
-       "label": "Recommended action"
+       "label": "Recommendation"
       },
       {
        "de": "CBo81R52N6g",

@@ -874,7 +874,8 @@ class Store {
 
 		// Default the nationality to "National" (l4UMmqvSBe5) so the form opens
 		// ready-to-use, while leaving the selector editable for other cases.
-		if (!this.selectedNationality && this.nationalitySelect.length) {
+		if (this.nationalitySelect.length &&
+			!this.nationalitySelect.some((option: any) => option.id === this.selectedNationality)) {
 			const national = this.nationalitySelect.find(
 				(n: any) =>
 					n?.id === "l4UMmqvSBe5" ||

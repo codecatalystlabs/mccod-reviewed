@@ -1,5 +1,6 @@
 import moment from "moment";
-import { DeMeta } from "./DynamicFormStore";
+import type { DeMeta } from "./DynamicFormStore";
+import { answered, ChildFieldIds, childDateOfDeath, childFieldsForDisplay, childFollowUps, calculateChildAge, childUnder28Days, hiddenChildFields, legacyAgeDays } from "./childReview";
 import { FormDefinition, FormField, FormId } from "./types";
 
 export interface SkipState {
@@ -11,6 +12,15 @@ export interface SkipState {
 }
 
 type Values = Record<string, any>;
+
+export const maternalPregnancyOutcome = "aCzqBYUkfDe";
+const maternalLabour = "J11gxMDNvv7";
+const maternalDelivery = "PbayNOhXnyx";
+const maternalDeliveryPlace = "AqXDMjrPUEE";
+const deliveryChoices = [
+  ["TKWaMxLDj7J", "kHdz10PWtjp", "brmlMKiNrZt", "On3EvqCavl1", "NAnhGvDjMRF", "sju2IsSkUZG", "Wy8zkenyVr4"],
+  ["OP5Jr95bkkW", "BLbGQB5NTX1", "ZMq8DHxtwCP", "OdQkbYCACsT", "ZOZFaanQLAD", "YHBzpuYWQg1", "STVD72fHWYK"],
+];
 
 const MCCOD = {
   sex: "e96GB4CXyd3",
@@ -115,6 +125,8 @@ const CONDITIONAL: {
   { child: "VtF7Nx2yjat", parent: "VnDcrZ4gCdR", when: "positive", forms: ["pdr"] },
   { child: "b9JlESs135J", parent: "o69aE6o8LfO", when: "no", forms: ["pdr"] },
   // MDR
+  { child: "eJwpqR9t7YM", parent: "iAgu1y93XAB", when: "yes", forms: ["mdr"] },
+  { child: "smzNleAK8sl", parent: "js6jQi1rx1j", when: "yes", forms: ["mdr"] },
   { child: "hZlRNVrmS1y", parent: "QidQVyBFspW", when: "yes", forms: ["mdr"] },
   { child: "IACcLw1GbkR", parent: "oz0vASbQvq5", when: "positive", forms: ["mdr"] },
   { child: "OJVwBSHC4b0", parent: "oz0vASbQvq5", when: "positive", forms: ["mdr"] },
@@ -164,7 +176,7 @@ const optionLabel = (de: string, value: any, meta: Record<string, DeMeta>) => {
 
 export const isYes = (values: Values, de: string, meta: Record<string, DeMeta>) => {
   const t = optionLabel(de, values[de], meta);
-  return /^yes$/i.test(t) || values[de] === true || values[de] === "true" || /^YN01-01$/i.test(String(values[de]));
+  return /^(yes|y|true)$/i.test(t.trim()) || values[de] === true || values[de] === "true" || /^YN01-01$/i.test(String(values[de]));
 };
 
 export const isNo = (values: Values, de: string, meta: Record<string, DeMeta>) => {
@@ -323,17 +335,29 @@ const applyLabelConditionals = (
   }
 };
 
-/** Child Death Review: maternal risk factors only for children < 28 days. */
-const CDR_AGE_DAYS = "CdceEuqRSwT";
+/** CDSR skips maternal risk factors if the child was under 28 completed days. */
 const applyCdrRules = (
   values: Values,
   def: FormDefinition,
-  state: SkipState
+  state: SkipState,
+  ids: ChildFieldIds,
+  meta: Record<string, DeMeta>
 ) => {
-  // The age element only holds days for infants under one month; when it is
-  // filled and under 28 days, the maternal risk-factor section is skipped.
-  const days = values[CDR_AGE_DAYS];
-  if (hasValue(days) && Number(days) < 28) {
+  for (const key of Object.keys(childFollowUps) as (keyof ChildFieldIds)[]) {
+    const de = ids[key];
+    const parent = childFollowUps[key];
+    if (de && parent && !isYes(values, parent, meta)) state.hiddenFields.add(de);
+  }
+  for (const de of hiddenChildFields(values, ids)) state.hiddenFields.add(de);
+  const age = ids.birthDate && calculateChildAge(values[ids.birthDate], values[childDateOfDeath]);
+  const hasNewAge = [ids.ageYears, ids.ageMonths, ids.ageDays].some((de) => de && answered(values[de]));
+  if (age) {
+    for (const de of [ids.ageYears, ids.ageMonths, ids.ageDays, ids.ageSource]) {
+      if (de) state.disabledFields.add(de);
+    }
+  }
+  if (ids.birthDate && (hasNewAge || age)) state.hiddenFields.add(legacyAgeDays);
+  if (childUnder28Days(values, ids)) {
     def.layout.forEach((sec, idx) => {
       if (/maternal risk factor/i.test(sec.title)) {
         state.hiddenSections.add(idx);
@@ -454,7 +478,16 @@ export const applySkipEffects = (
   meta: Record<string, DeMeta>,
   formId: FormId
 ): Values => {
+  if (formId === "cdr") return {};
   const patch: Values = {};
+  if (formId === "mdr") {
+    for (const choices of deliveryChoices) {
+      const selected = choices.find((de) => de in changed && isYes(values, de, meta));
+      if (selected) {
+        for (const de of choices) if (de !== selected) patch[de] = false;
+      }
+    }
+  }
 
   if (changed[MCCOD.dob] && moment.isMoment(changed[MCCOD.dob])) {
     patch[MCCOD.age] = moment().diff(changed[MCCOD.dob], "years");
@@ -518,7 +551,8 @@ export const computeSkipState = (
   formId: FormId,
   def: FormDefinition,
   values: Values,
-  meta: Record<string, DeMeta>
+  meta: Record<string, DeMeta>,
+  childFieldIds: ChildFieldIds = {}
 ): SkipState => {
   const state = emptySkipState();
 
@@ -533,12 +567,36 @@ export const computeSkipState = (
   applyConditionalChildren(formId, values, meta, state);
   applyLabelConditionals(def, values, meta, state, overridden);
 
+  for (const de of ["NEW_pdr_facility_level", "NEW_mdr_facility_level", "NEW_mdr_ownership", "NEW_mdr_nationality"]) {
+    state.hiddenFields.add(de);
+  }
+  if (formId === "mdr") {
+    if (optionLabel("NEW_mdr_death_place_type", values.NEW_mdr_death_place_type, meta) === "Before Admission") {
+      for (const de of ["wmNrbtFpcdy", "ByIsCiqkq4v", "vORgqb7tQBu", "jdxl2rdeDEk", "c5kDr80smH8", "IH7NTNcSZYk", "ww21ycTPDb6", "BJXbwUs4tGF"]) {
+        state.hiddenFields.add(de);
+      }
+    }
+    if (!isYes(values, maternalLabour, meta)) {
+      for (const de of ["E0OEw6yVcJm", "NKKunKgeJiD", "pVGyUKsZywW", "tkiEm0lt9cV", "HJhEdW3YNL3"]) state.hiddenFields.add(de);
+    }
+    if (state.hiddenFields.has("E0OEw6yVcJm") || !isYes(values, "E0OEw6yVcJm", meta)) state.hiddenFields.add("v9BgVEytqsi");
+    const delivered = isYes(values, maternalDelivery, meta);
+    if (!delivered) {
+      for (const de of [maternalDeliveryPlace, "XW2CKaAiMKc", ...deliveryChoices.flat()]) state.hiddenFields.add(de);
+    }
+    const place = optionLabel(maternalDeliveryPlace, values[maternalDeliveryPlace], meta);
+    if (!delivered || !/facility|hospital|health cent(?:re|er)|clinic/i.test(place)) state.hiddenFields.add("NEW_mdr_delivery_facility_name");
+    if (!isYes(values, "js6jQi1rx1j", meta) || !isYes(values, "smzNleAK8sl", meta)) state.hiddenFields.add("UEmwYMZK0Uh");
+    state.hiddenFields.delete(maternalPregnancyOutcome);
+    state.hints[maternalPregnancyOutcome] = "Required by DHIS2.";
+  }
+
   if (formId === "mccod" || def.isMccod) {
     applyMccodRules(values, meta, def, state);
   }
 
   if (formId === "cdr") {
-    applyCdrRules(values, def, state);
+    applyCdrRules(values, def, state, childFieldsForDisplay(childFieldIds), meta);
   }
 
   return state;

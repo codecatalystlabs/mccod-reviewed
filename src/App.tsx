@@ -21,13 +21,9 @@ export const App = observer(() => {
   const [fetching, setFetching] = useState(false);
 
 
-  // Legacy MCCOD bootstrap — only when embedded from another app, not on a
-  // normal browser visit (stale mcodtemp in localStorage must not hijack home).
+  // DHIS2 can frame a normal app launch. Legacy editing is opt-in.
   useEffect(() => {
-    const search = `${window.location.search}${window.location.hash}`;
-    const embedded =
-      window !== window.parent || /iframe_edit=true/.test(search);
-    if (embedded) {
+    if (new URLSearchParams(window.location.search).get("iframe_edit") === "true") {
       store.openModule("records");
     }
   }, []);

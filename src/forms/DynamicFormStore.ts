@@ -5,6 +5,14 @@ import { store as mainStore } from "../Store";
 import { FormDefinition } from "./types";
 import { answered, ChildFieldIds, childDateOfDeath, childDerivedValues, childFields, extendChildLayout, isPendingChildField, resolveChildFields, validateChildReview } from "./childReview";
 import { computeSkipState, isYes, maternalPregnancyOutcome } from "./skipLogic";
+import {
+  fromDhis2DeId,
+  isMappedPendingDe,
+  mappedPendingUids,
+  PENDING_DATA_ELEMENTS,
+  toDhis2DeId,
+} from "./pendingDataElements";
+import { mustCorrectFlags, validateReviewForm } from "./reviewValidation";
 import { resolveEventAttributeOptionCombo } from "./trackerCategory";
 import { CERTIFICATE_PLACE_OF_DEATH } from "./registry";
 
@@ -174,7 +182,7 @@ class DynamicFormStore {
     return this.engine.link.fetch(url, { cache: "no-store", redirect: "error" });
   }
 
-  /** All real DHIS2 data element UIDs referenced by a form's layout. */
+  /** All real DHIS2 data element UIDs referenced by a form's layout (incl. mapped placeholders). */
   private layoutDataElementIds = (def: FormDefinition): string[] => {
     const UID = /^[A-Za-z][A-Za-z0-9]{10}$/;
     const set = new Set<string>();
@@ -182,12 +190,29 @@ class DynamicFormStore {
       for (const group of section.groups) {
         for (const f of group.fields) {
           [f.de, f.codeField, f.uriField].forEach((id) => {
-            if (id && UID.test(id)) set.add(id);
+            if (!id) return;
+            const resolved = toDhis2DeId(id);
+            if (UID.test(resolved)) set.add(resolved);
           });
         }
       }
     }
+    for (const uid of mappedPendingUids()) set.add(uid);
     return Array.from(set);
+  };
+
+  /** Fallback meta for unmapped NEW_* placeholders (UI-only until UIDs are pasted). */
+  private pendingFallbackMeta = (): Record<string, DeMeta> => {
+    const meta: Record<string, DeMeta> = {};
+    for (const de of PENDING_DATA_ELEMENTS) {
+      meta[de.placeholder] = {
+        id: de.placeholder,
+        name: de.name,
+        valueType: de.valueType === "TRUE_ONLY" ? "TRUE_ONLY" : de.valueType,
+        options: de.options,
+      };
+    }
+    return meta;
   };
 
   /** Resolve the owning program + metadata for every field the form renders. */
@@ -255,117 +280,17 @@ class DynamicFormStore {
           console.log("loadMeta chunk error", e);
         }
       }
-      const FALLBACK_META: Record<string, DeMeta> = {
-        "NEW_pdr_notif_sent": { id: "NEW_pdr_notif_sent", name: "Was the perinatal death notification form completed and sent/captured?", valueType: "BOOLEAN" },
-        "NEW_pdr_review_date": { id: "NEW_pdr_review_date", name: "Date of Review", valueType: "DATE" },
-        "NEW_pdr_mother_nin": { id: "NEW_pdr_mother_nin", name: "Mother NIN", valueType: "TEXT" },
-        "NEW_pdr_facility_level": {
-          id: "NEW_pdr_facility_level",
-          name: "Level of health facility",
-          valueType: "TEXT",
-          options: [
-            { code: "NRH", name: "National Referral Hospital" },
-            { code: "RRH", name: "Regional Referral Hospital" },
-            { code: "GH", name: "General Hospital" },
-            { code: "HC IV", name: "HC IV" },
-            { code: "HC III", name: "HC III" },
-            { code: "HC II", name: "HC II" },
-            { code: "Others", name: "Others (specify)" },
-          ],
-        },
-        "NEW_pdr_multiple_babies_count": { id: "NEW_pdr_multiple_babies_count", name: "If multiple, state number of babies", valueType: "INTEGER" },
-        "NEW_pdr_blood_group": {
-          id: "NEW_pdr_blood_group",
-          name: "Blood Group",
-          valueType: "TEXT",
-          options: [
-            { code: "A", name: "A" },
-            { code: "B", name: "B" },
-            { code: "AB", name: "AB" },
-            { code: "O", name: "O" },
-          ],
-        },
-        "NEW_pdr_rhesus_factor": {
-          id: "NEW_pdr_rhesus_factor",
-          name: "Rhesus Factor",
-          valueType: "TEXT",
-          options: [
-            { code: "Positive", name: "Positive" },
-            { code: "Negative", name: "Negative" },
-          ],
-        },
-        "NEW_pdr_blood_transfusion": { id: "NEW_pdr_blood_transfusion", name: "Blood Transfusion During Pregnancy", valueType: "BOOLEAN" },
-        "NEW_pdr_neonatal_admission_time": { id: "NEW_pdr_neonatal_admission_time", name: "If Neonatal death, Date and time of Admission", valueType: "DATETIME" },
-        "NEW_3B8Z": { id: "NEW_3B8Z", name: "3B8Z Bleeding disorders (specify)", valueType: "BOOLEAN" },
-        "NEW_pdr_record_legibility": {
-          id: "NEW_pdr_record_legibility",
-          name: "Legibility of Medical Records",
-          valueType: "TEXT",
-          options: [
-            { code: "Good", name: "Good" },
-            { code: "Poor", name: "Poor" },
-          ],
-        },
-        "NEW_pdr_reviewer_details": { id: "NEW_pdr_reviewer_details", name: "Reviewer Details (Name / Contact / Date)", valueType: "LONG_TEXT" },
-        "NEW_mdr_notif_sent": { id: "NEW_mdr_notif_sent", name: "Was the maternal death notification form completed and sent?", valueType: "BOOLEAN" },
-        "NEW_mdr_facility_level": {
-          id: "NEW_mdr_facility_level",
-          name: "Level of health facility",
-          valueType: "TEXT",
-          options: [
-            { code: "National Referral Hospital", name: "National Referral Hospital" },
-            { code: "Regional Referral Hospital", name: "Regional Referral Hospital" },
-            { code: "General Hospital", name: "General Hospital" },
-            { code: "HC IV", name: "HC IV" },
-            { code: "HC III", name: "HC III" },
-            { code: "Private Maternity", name: "Private Maternity" },
-            { code: "Other-specify", name: "Other-specify" },
-          ],
-        },
-        "NEW_mdr_ownership": {
-          id: "NEW_mdr_ownership",
-          name: "Facility Ownership",
-          valueType: "TEXT",
-          options: [
-            { code: "Government", name: "Government" },
-            { code: "Private for profit", name: "Private for profit" },
-            { code: "PNFP", name: "PNFP" },
-          ],
-        },
-        "NEW_mdr_nationality": {
-          id: "NEW_mdr_nationality",
-          name: "Nationality",
-          valueType: "TEXT",
-          options: [
-            { code: "National", name: "National" },
-            { code: "Refugee", name: "Refugee" },
-            { code: "Foreigner", name: "Foreigner" },
-          ],
-        },
-        "NEW_mdr_death_place_type": {
-          id: "NEW_mdr_death_place_type",
-          name: "Where did the death occur?",
-          valueType: "TEXT",
-          options: [
-            { code: "At the facility after Admission", name: "At the facility after Admission" },
-            { code: "Before Admission", name: "Before Admission" },
-          ],
-        },
-        "NEW_mdr_delivery_facility_name": { id: "NEW_mdr_delivery_facility_name", name: "Specify Name of facility", valueType: "TEXT" },
-        "NEW_mdr_record_legibility": {
-          id: "NEW_mdr_record_legibility",
-          name: "Legibility of Medical Records",
-          valueType: "TEXT",
-          options: [
-            { code: "Good", name: "Good" },
-            { code: "Poor", name: "Poor" },
-          ],
-        },
-        "NEW_mdr_reviewer_details": { id: "NEW_mdr_reviewer_details", name: "Reviewer Details (Name / Contact / Date)", valueType: "LONG_TEXT" },
-      };
+      // Alias mapped placeholder keys to the fetched DHIS2 meta so widgets keep
+      // working while layouts still use NEW_* ids.
+      for (const de of PENDING_DATA_ELEMENTS) {
+        const uid = toDhis2DeId(de.placeholder);
+        if (uid !== de.placeholder && meta[uid]) {
+          meta[de.placeholder] = { ...meta[uid], id: de.placeholder };
+        }
+      }
 
       runInAction(() => {
-        this.meta = { ...FALLBACK_META, ...meta };
+        this.meta = { ...this.pendingFallbackMeta(), ...meta };
         this.childFieldIds = resolveChildFields(Object.entries(childFieldIds).map(([key, id]) => ({
           ...meta[id],
           code: childFields[key as keyof ChildFieldIds].code,
@@ -682,7 +607,8 @@ class DynamicFormStore {
     this.currentEvent = event;
     const dv: Record<string, any> = {};
     (event?.dataValues || []).forEach((d: any) => {
-      dv[d.dataElement] = d.value;
+      // Remap real UIDs back to NEW_* layout keys when a mapping exists.
+      dv[fromDhis2DeId(d.dataElement)] = d.value;
     });
 
     const activeForm = this.activeForm;
@@ -766,6 +692,26 @@ class DynamicFormStore {
       notification.error({ message: "Select the outcome of pregnancy in Section 5 before saving." });
       return false;
     }
+    if (def.id === "mdr" || def.id === "pdr") {
+      const flags = validateReviewForm(def.id, values, this.meta);
+      const blockers = mustCorrectFlags(flags);
+      if (blockers.length) {
+        notification.error({
+          message: "Correct the highlighted values before saving",
+          description: blockers.map((f) => f.message).join(" "),
+          duration: 6,
+        });
+        return false;
+      }
+      const confirms = flags.filter((f) => f.type === "confirm");
+      if (confirms.length) {
+        notification.warning({
+          message: "Please confirm unusual values",
+          description: confirms.map((f) => f.message).join(" "),
+          duration: 5,
+        });
+      }
+    }
     if (def.id === "cdr") {
       const original: Record<string, any> = {};
       for (const entry of this.currentEvent?.dataValues || []) {
@@ -831,12 +777,15 @@ class DynamicFormStore {
       }
 
       const dataValues = Object.entries(values)
-        .filter(([de]) => !isPendingChildField(de) && de !== "NEW_pdr_mother_nin")
+        // Drop unmapped NEW_* placeholders (they are not DHIS2 DEs yet).
+        // Mapped placeholders are rewritten to real UIDs below and kept.
+        .filter(([de]) => !isPendingChildField(de) && (isMappedPendingDe(de) || !de.startsWith("NEW_")))
         .filter(
           ([de, v]) =>
             (def.id === "cdr" && v === null && Object.values(this.childFieldIds).includes(de)) ||
             (v !== undefined && v !== null && v !== "" && !(Array.isArray(v) && v.length === 0))
         )
+        .map(([de, value]) => [toDhis2DeId(de), value] as [string, any])
         // Only send data elements that belong to this program stage (always keep case number).
         .filter(
           ([de]) =>
@@ -850,7 +799,7 @@ class DynamicFormStore {
           // Multi-select → comma-joined option codes.
           if (Array.isArray(value)) out = value.join(",");
           if (isMoment(value)) {
-            const vt = this.meta[dataElement]?.valueType;
+            const vt = this.meta[fromDhis2DeId(dataElement)]?.valueType || this.meta[dataElement]?.valueType;
             out =
               vt === "DATETIME"
                 ? moment(value).format("YYYY-MM-DDTHH:mm:ss.SSS")

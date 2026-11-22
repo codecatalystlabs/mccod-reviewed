@@ -11,7 +11,7 @@ jest.mock("../Store", () => ({
   },
 }));
 
-jest.mock("antd", () => ({ notification: { success: jest.fn(), error: jest.fn() } }));
+jest.mock("antd", () => ({ notification: { success: jest.fn(), error: jest.fn(), warning: jest.fn() } }));
 
 test("saves a facility draft, completes the same event, and retains an inactive answer", async () => {
   const def = getFormDefinition("cdr");
@@ -73,15 +73,28 @@ test("maternal review skips inapplicable questions and keeps pregnancy outcome v
     NEW_mdr_death_place_type: "Before Admission",
     iAgu1y93XAB: "No", J11gxMDNvv7: "No", E0OEw6yVcJm: "Yes",
     PbayNOhXnyx: "No", js6jQi1rx1j: "No", smzNleAK8sl: "Yes",
+    QidQVyBFspW: "No",
   };
   const skip = computeSkipState("mdr", def, values, {});
   expect(Array.from(skip.hiddenFields)).toEqual(expect.arrayContaining([
-    "NEW_mdr_facility_level", "NEW_mdr_ownership", "NEW_mdr_nationality",
     "c5kDr80smH8", "eJwpqR9t7YM", "E0OEw6yVcJm", "v9BgVEytqsi",
     "TKWaMxLDj7J", "smzNleAK8sl", "UEmwYMZK0Uh",
+    "a5fh4wtDzmi", "vVP5ClqKkHQ",
   ]));
+  expect(skip.hiddenFields.has("NEW_mdr_facility_level")).toBe(false);
   expect(skip.hiddenFields.has(maternalPregnancyOutcome)).toBe(false);
   expect(applySkipEffects({ TKWaMxLDj7J: true }, { TKWaMxLDj7J: true }, {}, "mdr").kHdz10PWtjp).toBe(false);
+});
+
+test("perinatal stillbirth hides newborn questions and unknown cause clears others", () => {
+  const def = getFormDefinition("pdr");
+  const stillbirth = computeSkipState("pdr", def, { TiPl1iLI30H: "Fresh stillbirth" }, {});
+  expect(Array.from(stillbirth.hiddenFields)).toEqual(expect.arrayContaining([
+    "RmrshOepF86", "x7k2caL4psq", "qaJDxXfEWPv", "Q6HnSrUTl39", "jSaonaOE68O",
+  ]));
+  const unknown = computeSkipState("pdr", def, { Y5T6DMJiZPJ: true }, {});
+  expect(unknown.hiddenFields.has("apgGGC11v8Y")).toBe(true);
+  expect(applySkipEffects({ Y5T6DMJiZPJ: true }, { Y5T6DMJiZPJ: true }, {}, "pdr").NEW_3B8Z).toBe(false);
 });
 
 test("maternal Tracker submissions reuse nationality and omit unchecked TRUE_ONLY fields", async () => {

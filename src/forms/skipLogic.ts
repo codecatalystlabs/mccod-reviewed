@@ -17,9 +17,59 @@ export const maternalPregnancyOutcome = "aCzqBYUkfDe";
 const maternalLabour = "J11gxMDNvv7";
 const maternalDelivery = "PbayNOhXnyx";
 const maternalDeliveryPlace = "AqXDMjrPUEE";
+const maternalAncAttended = "QidQVyBFspW";
+const perinatalAncAttended = "GOC04o3duHu";
+const perinatalDeathType = "TiPl1iLI30H";
+const perinatalUnknownCause = "Y5T6DMJiZPJ";
+const perinatalPregnancyType = "CY6W9fagQ0e";
+
 const deliveryChoices = [
   ["TKWaMxLDj7J", "kHdz10PWtjp", "brmlMKiNrZt", "On3EvqCavl1", "NAnhGvDjMRF", "sju2IsSkUZG", "Wy8zkenyVr4"],
   ["OP5Jr95bkkW", "BLbGQB5NTX1", "ZMq8DHxtwCP", "OdQkbYCACsT", "ZOZFaanQLAD", "YHBzpuYWQg1", "STVD72fHWYK"],
+];
+
+/** MDR ANC follow-ups closed when ANC is No / Records not available. */
+const MDR_ANC_FOLLOWUPS = [
+  "a5fh4wtDzmi",
+  "y0B7fm7rguE", "kRQ3g914TCz", "TxyHEYfHKrF", "Hg1Jyk0pakg", "kUecSo0kdJ3",
+  "wwmxSrEknn8", "byW52kaC6pR", "W2Dxjt6PxN5", "nw15Ko1SKnq",
+  "fA4uVOOV7Gl", "yajntikIgCk", "HwJeCYbUnDL", "Us9t4jzNMSd", "BxBqvKhoJvj",
+  "vVP5ClqKkHQ", "oz0vASbQvq5", "IACcLw1GbkR", "OJVwBSHC4b0",
+  "x4luCocBY5h", "z8bU25JRAGG", "T3QwXHphTIu", "QPw7nHXJqe9", "c6gVPQ5rTOo",
+  "fuRsZ7wn5Q5", "cqVj2lrYx2W",
+];
+
+/** PDR ANC intervention/test block closed when ANC is No. */
+const PDR_ANC_FOLLOWUPS = [
+  "MEk5ws6HFaz", "kKZnZPrggaX", "J8cM570ZGHa", "biBZmUjxguG",
+  "EC4nyhCs66y", "wizIGlVHHLE", "WYGPAumPdxH",
+  "ywMAGkuvTjq", "VnDcrZ4gCdR", "VtF7Nx2yjat",
+  "DPG74K71T7a", "qnhVulYBuyO",
+  "noTA8bNu7Er", "g7cj6HmiFHJ", "riyahnxUdTf",
+  "NEW_pdr_blood_group", "NEW_pdr_rhesus_factor", "NEW_pdr_blood_transfusion",
+];
+
+/** Newborn-only fields closed for fresh/macerated stillbirth. */
+const PDR_NEWBORN_FIELDS = [
+  "H34bcwaOliX",
+  "RmrshOepF86", "kOCe0LCjbVv", "pimd0GLDogv", "Yis06rsFWQz",
+  "x7k2caL4psq",
+  "mkQMb4ANZ1C", "x7fsCQzTP4G", "HeOmzW0Bj8f", "IELb95GgJhj",
+  "YPDveEOR7Cz", "yCUx2f9ed7R", "CprvAYJIWNv", "QP3u2BU4E9p",
+  "q4YXJgj2sIZ", "LF6ukmshijY", "PlzGmmIbpK5", "bRddgcYH9Qn",
+  "fv703VfWJli", "J3VHBvaXyyb",
+  "NEW_pdr_neonatal_admission_time",
+  "qaJDxXfEWPv", "Rqn5P8xXXqp", "WlknV4Af2se", "cbCv995TsyQ",
+  "OeL1eJ2tGsN", "prGljHyx851", "XoWWbJlnMsi", "T609w4wbcim",
+  "YV5WasxuoTN", "M5zzpq6O4xU", "Hq66gDflc5k", "vnKvRqyjngA", "XZRrIoCTb3P",
+];
+
+/** Causes that cannot apply to a stillbirth. */
+const PDR_STILLBIRTH_IMPOSSIBLE_CAUSES = ["Q6HnSrUTl39", "jSaonaOE68O"]; // tetanus, septicaemia
+
+const PDR_CAUSE_TICKS = [
+  "Q6HnSrUTl39", "UaGg4B3DUac", "jSaonaOE68O", "xYenYvBElrk",
+  "xjeIBJ2XyPd", "H4iDsba7jkw", "apgGGC11v8Y", "NEW_3B8Z",
 ];
 
 const MCCOD = {
@@ -169,7 +219,7 @@ const hasValue = (v: any) =>
   v !== "" &&
   !(Array.isArray(v) && v.length === 0);
 
-const optionLabel = (de: string, value: any, meta: Record<string, DeMeta>) => {
+export const optionLabel = (de: string, value: any, meta: Record<string, DeMeta>) => {
   const opt = meta[de]?.options?.find((o) => o.code === value);
   return opt?.name ?? (value == null ? "" : String(value));
 };
@@ -544,6 +594,33 @@ export const applySkipEffects = (
     if (!show) patch[rule.child] = undefined;
   }
 
+  if (formId === "pdr" && perinatalUnknownCause in changed) {
+    if (isTruthyCheckbox(values[perinatalUnknownCause]) || isYes(values, perinatalUnknownCause, meta)) {
+      for (const de of PDR_CAUSE_TICKS) patch[de] = false;
+    }
+  }
+
+  if (formId === "pdr" && perinatalDeathType in changed) {
+    const deathType = optionLabel(perinatalDeathType, values[perinatalDeathType], meta);
+    const stillbirth = /still\s*birth|fresh|macerated/i.test(deathType) && !/neonatal/i.test(deathType);
+    if (stillbirth) {
+      for (const de of [...PDR_NEWBORN_FIELDS, ...PDR_STILLBIRTH_IMPOSSIBLE_CAUSES]) {
+        patch[de] = undefined;
+      }
+    }
+  }
+
+  if (formId === "mdr" && maternalAncAttended in changed) {
+    const ancLabel = optionLabel(maternalAncAttended, values[maternalAncAttended], meta);
+    if (!isYes(values, maternalAncAttended, meta) || /records?\s+not\s+available|unknown/i.test(ancLabel)) {
+      for (const de of MDR_ANC_FOLLOWUPS) patch[de] = undefined;
+    }
+  }
+
+  if (formId === "pdr" && perinatalAncAttended in changed && !isYes(values, perinatalAncAttended, meta)) {
+    for (const de of PDR_ANC_FOLLOWUPS) patch[de] = undefined;
+  }
+
   return patch;
 };
 
@@ -567,14 +644,16 @@ export const computeSkipState = (
   applyConditionalChildren(formId, values, meta, state);
   applyLabelConditionals(def, values, meta, state, overridden);
 
-  for (const de of ["NEW_pdr_facility_level", "NEW_mdr_facility_level", "NEW_mdr_ownership", "NEW_mdr_nationality"]) {
-    state.hiddenFields.add(de);
-  }
   if (formId === "mdr") {
     if (optionLabel("NEW_mdr_death_place_type", values.NEW_mdr_death_place_type, meta) === "Before Admission") {
       for (const de of ["wmNrbtFpcdy", "ByIsCiqkq4v", "vORgqb7tQBu", "jdxl2rdeDEk", "c5kDr80smH8", "IH7NTNcSZYk", "ww21ycTPDb6", "BJXbwUs4tGF"]) {
         state.hiddenFields.add(de);
       }
+    }
+    // No ANC / records unavailable → close facility type, risk, meds, investigations.
+    const ancLabel = optionLabel(maternalAncAttended, values[maternalAncAttended], meta);
+    if (!isYes(values, maternalAncAttended, meta) || /records?\s+not\s+available|unknown/i.test(ancLabel)) {
+      for (const de of MDR_ANC_FOLLOWUPS) state.hiddenFields.add(de);
     }
     if (!isYes(values, maternalLabour, meta)) {
       for (const de of ["E0OEw6yVcJm", "NKKunKgeJiD", "pVGyUKsZywW", "tkiEm0lt9cV", "HJhEdW3YNL3"]) state.hiddenFields.add(de);
@@ -589,6 +668,36 @@ export const computeSkipState = (
     if (!isYes(values, "js6jQi1rx1j", meta) || !isYes(values, "smzNleAK8sl", meta)) state.hiddenFields.add("UEmwYMZK0Uh");
     state.hiddenFields.delete(maternalPregnancyOutcome);
     state.hints[maternalPregnancyOutcome] = "Required by DHIS2.";
+  }
+
+  if (formId === "pdr") {
+    if (!isYes(values, perinatalAncAttended, meta)) {
+      for (const de of PDR_ANC_FOLLOWUPS) state.hiddenFields.add(de);
+    }
+    const pregType = optionLabel(perinatalPregnancyType, values[perinatalPregnancyType], meta);
+    if (!/multiple|twin|triplet/i.test(pregType)) {
+      state.hiddenFields.add("NEW_pdr_multiple_babies_count");
+    }
+    const deathType = optionLabel(perinatalDeathType, values[perinatalDeathType], meta);
+    const stillbirth = /still\s*birth|fresh|macerated/i.test(deathType) && !/neonatal/i.test(deathType);
+    if (stillbirth) {
+      for (const de of PDR_NEWBORN_FIELDS) state.hiddenFields.add(de);
+      for (const de of PDR_STILLBIRTH_IMPOSSIBLE_CAUSES) state.hiddenFields.add(de);
+    }
+    if (isTruthyCheckbox(values[perinatalUnknownCause]) || isYes(values, perinatalUnknownCause, meta)) {
+      for (const de of PDR_CAUSE_TICKS) state.hiddenFields.add(de);
+    }
+    if (isTruthyCheckbox(values.Yis06rsFWQz) || isYes(values, "Yis06rsFWQz", meta)) {
+      for (const de of ["RmrshOepF86", "kOCe0LCjbVv", "pimd0GLDogv"]) state.hiddenFields.add(de);
+    }
+    if (!isYes(values, "x7k2caL4psq", meta)) {
+      for (const de of [
+        "mkQMb4ANZ1C", "x7fsCQzTP4G", "HeOmzW0Bj8f", "IELb95GgJhj",
+        "YPDveEOR7Cz", "yCUx2f9ed7R", "CprvAYJIWNv", "QP3u2BU4E9p",
+        "q4YXJgj2sIZ", "LF6ukmshijY", "PlzGmmIbpK5", "bRddgcYH9Qn",
+        "fv703VfWJli", "J3VHBvaXyyb",
+      ]) state.hiddenFields.add(de);
+    }
   }
 
   if (formId === "mccod" || def.isMccod) {

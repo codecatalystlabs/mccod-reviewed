@@ -9,6 +9,14 @@
       {
        "de": "ZKBE8Xm9DJG",
        "label": "Ministry of Health National Case Number"
+      },
+      {
+       "de": "NEW_pdr_notif_sent",
+       "label": "Was the perinatal death notification form completed and sent/captured?"
+      },
+      {
+       "de": "NEW_pdr_review_date",
+       "label": "Date of Review"
       }
      ]
     }
@@ -31,7 +39,7 @@
       {
        "de": "NEW_pdr_mother_nin",
        "label": "1.1.3 Mother NIN",
-       "hint": "Used for this lookup. Saving the NIN requires a mapped DHIS2 data element."
+       "hint": "Paste a real DHIS2 UID into PENDING_DE_UIDS.NEW_pdr_mother_nin to persist this value."
       },
       {
        "de": "NEW_pdr_facility_level",
@@ -474,6 +482,10 @@
       {
        "de": "XZRrIoCTb3P",
        "label": "Reason for admission/ diagnosis at admission-Other conditions"
+      },
+      {
+       "de": "NEW_pdr_neonatal_admission_time",
+       "label": "3.8.1.1 If Neonatal death, Date and time of Admission"
       }
      ]
     },

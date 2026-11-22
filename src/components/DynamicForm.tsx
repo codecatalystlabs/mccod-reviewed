@@ -213,7 +213,13 @@ export const FieldWidget = observer(
     }
     if (vt === "DATE") {
       return (
-        <DatePicker {...rest} size="middle" disabled={disabled} style={{ width: "100%" }} />
+        <DatePicker
+          {...rest}
+          size="middle"
+          disabled={disabled}
+          style={{ width: "100%" }}
+          disabledDate={(current) => !!current && current.isAfter(moment(), "day")}
+        />
       );
     }
     if (vt === "DATETIME") {
@@ -224,6 +230,7 @@ export const FieldWidget = observer(
           showTime
           disabled={disabled}
           style={{ width: "100%" }}
+          disabledDate={(current) => !!current && current.isAfter(moment(), "day")}
         />
       );
     }

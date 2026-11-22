@@ -1,5 +1,6 @@
 import moment from "moment";
-import { DeMeta } from "./DynamicFormStore";
+import type { DeMeta } from "./DynamicFormStore";
+import { answered, ChildFieldIds, childDateOfDeath, childFieldsForDisplay, childFollowUps, calculateChildAge, childUnder28Days, hiddenChildFields, legacyAgeDays } from "./childReview";
 import { FormDefinition, FormField, FormId } from "./types";
 
 export interface SkipState {
@@ -11,6 +12,65 @@ export interface SkipState {
 }
 
 type Values = Record<string, any>;
+
+export const maternalPregnancyOutcome = "aCzqBYUkfDe";
+const maternalLabour = "J11gxMDNvv7";
+const maternalDelivery = "PbayNOhXnyx";
+const maternalDeliveryPlace = "AqXDMjrPUEE";
+const maternalAncAttended = "QidQVyBFspW";
+const perinatalAncAttended = "GOC04o3duHu";
+const perinatalDeathType = "TiPl1iLI30H";
+const perinatalUnknownCause = "Y5T6DMJiZPJ";
+const perinatalPregnancyType = "CY6W9fagQ0e";
+
+const deliveryChoices = [
+  ["TKWaMxLDj7J", "kHdz10PWtjp", "brmlMKiNrZt", "On3EvqCavl1", "NAnhGvDjMRF", "sju2IsSkUZG", "Wy8zkenyVr4"],
+  ["OP5Jr95bkkW", "BLbGQB5NTX1", "ZMq8DHxtwCP", "OdQkbYCACsT", "ZOZFaanQLAD", "YHBzpuYWQg1", "STVD72fHWYK"],
+];
+
+/** MDR ANC follow-ups closed when ANC is No / Records not available. */
+const MDR_ANC_FOLLOWUPS = [
+  "a5fh4wtDzmi",
+  "y0B7fm7rguE", "kRQ3g914TCz", "TxyHEYfHKrF", "Hg1Jyk0pakg", "kUecSo0kdJ3",
+  "wwmxSrEknn8", "byW52kaC6pR", "W2Dxjt6PxN5", "nw15Ko1SKnq",
+  "fA4uVOOV7Gl", "yajntikIgCk", "HwJeCYbUnDL", "Us9t4jzNMSd", "BxBqvKhoJvj",
+  "vVP5ClqKkHQ", "oz0vASbQvq5", "IACcLw1GbkR", "OJVwBSHC4b0",
+  "x4luCocBY5h", "z8bU25JRAGG", "T3QwXHphTIu", "QPw7nHXJqe9", "c6gVPQ5rTOo",
+  "fuRsZ7wn5Q5", "cqVj2lrYx2W",
+];
+
+/** PDR ANC intervention/test block closed when ANC is No. */
+const PDR_ANC_FOLLOWUPS = [
+  "MEk5ws6HFaz", "kKZnZPrggaX", "J8cM570ZGHa", "biBZmUjxguG",
+  "EC4nyhCs66y", "wizIGlVHHLE", "WYGPAumPdxH",
+  "ywMAGkuvTjq", "VnDcrZ4gCdR", "VtF7Nx2yjat",
+  "DPG74K71T7a", "qnhVulYBuyO",
+  "noTA8bNu7Er", "g7cj6HmiFHJ", "riyahnxUdTf",
+  "NEW_pdr_blood_group", "NEW_pdr_rhesus_factor", "NEW_pdr_blood_transfusion",
+];
+
+/** Newborn-only fields closed for fresh/macerated stillbirth. */
+const PDR_NEWBORN_FIELDS = [
+  "H34bcwaOliX",
+  "RmrshOepF86", "kOCe0LCjbVv", "pimd0GLDogv", "Yis06rsFWQz",
+  "x7k2caL4psq",
+  "mkQMb4ANZ1C", "x7fsCQzTP4G", "HeOmzW0Bj8f", "IELb95GgJhj",
+  "YPDveEOR7Cz", "yCUx2f9ed7R", "CprvAYJIWNv", "QP3u2BU4E9p",
+  "q4YXJgj2sIZ", "LF6ukmshijY", "PlzGmmIbpK5", "bRddgcYH9Qn",
+  "fv703VfWJli", "J3VHBvaXyyb",
+  "NEW_pdr_neonatal_admission_time",
+  "qaJDxXfEWPv", "Rqn5P8xXXqp", "WlknV4Af2se", "cbCv995TsyQ",
+  "OeL1eJ2tGsN", "prGljHyx851", "XoWWbJlnMsi", "T609w4wbcim",
+  "YV5WasxuoTN", "M5zzpq6O4xU", "Hq66gDflc5k", "vnKvRqyjngA", "XZRrIoCTb3P",
+];
+
+/** Causes that cannot apply to a stillbirth. */
+const PDR_STILLBIRTH_IMPOSSIBLE_CAUSES = ["Q6HnSrUTl39", "jSaonaOE68O"]; // tetanus, septicaemia
+
+const PDR_CAUSE_TICKS = [
+  "Q6HnSrUTl39", "UaGg4B3DUac", "jSaonaOE68O", "xYenYvBElrk",
+  "xjeIBJ2XyPd", "H4iDsba7jkw", "apgGGC11v8Y", "NEW_3B8Z",
+];
 
 const MCCOD = {
   sex: "e96GB4CXyd3",
@@ -115,6 +175,8 @@ const CONDITIONAL: {
   { child: "VtF7Nx2yjat", parent: "VnDcrZ4gCdR", when: "positive", forms: ["pdr"] },
   { child: "b9JlESs135J", parent: "o69aE6o8LfO", when: "no", forms: ["pdr"] },
   // MDR
+  { child: "eJwpqR9t7YM", parent: "iAgu1y93XAB", when: "yes", forms: ["mdr"] },
+  { child: "smzNleAK8sl", parent: "js6jQi1rx1j", when: "yes", forms: ["mdr"] },
   { child: "hZlRNVrmS1y", parent: "QidQVyBFspW", when: "yes", forms: ["mdr"] },
   { child: "IACcLw1GbkR", parent: "oz0vASbQvq5", when: "positive", forms: ["mdr"] },
   { child: "OJVwBSHC4b0", parent: "oz0vASbQvq5", when: "positive", forms: ["mdr"] },
@@ -157,14 +219,14 @@ const hasValue = (v: any) =>
   v !== "" &&
   !(Array.isArray(v) && v.length === 0);
 
-const optionLabel = (de: string, value: any, meta: Record<string, DeMeta>) => {
+export const optionLabel = (de: string, value: any, meta: Record<string, DeMeta>) => {
   const opt = meta[de]?.options?.find((o) => o.code === value);
   return opt?.name ?? (value == null ? "" : String(value));
 };
 
 export const isYes = (values: Values, de: string, meta: Record<string, DeMeta>) => {
   const t = optionLabel(de, values[de], meta);
-  return /^yes$/i.test(t) || values[de] === true || values[de] === "true" || /^YN01-01$/i.test(String(values[de]));
+  return /^(yes|y|true)$/i.test(t.trim()) || values[de] === true || values[de] === "true" || /^YN01-01$/i.test(String(values[de]));
 };
 
 export const isNo = (values: Values, de: string, meta: Record<string, DeMeta>) => {
@@ -323,17 +385,29 @@ const applyLabelConditionals = (
   }
 };
 
-/** Child Death Review: maternal risk factors only for children < 28 days. */
-const CDR_AGE_DAYS = "CdceEuqRSwT";
+/** CDSR skips maternal risk factors if the child was under 28 completed days. */
 const applyCdrRules = (
   values: Values,
   def: FormDefinition,
-  state: SkipState
+  state: SkipState,
+  ids: ChildFieldIds,
+  meta: Record<string, DeMeta>
 ) => {
-  // The age element only holds days for infants under one month; when it is
-  // filled and under 28 days, the maternal risk-factor section is skipped.
-  const days = values[CDR_AGE_DAYS];
-  if (hasValue(days) && Number(days) < 28) {
+  for (const key of Object.keys(childFollowUps) as (keyof ChildFieldIds)[]) {
+    const de = ids[key];
+    const parent = childFollowUps[key];
+    if (de && parent && !isYes(values, parent, meta)) state.hiddenFields.add(de);
+  }
+  for (const de of hiddenChildFields(values, ids)) state.hiddenFields.add(de);
+  const age = ids.birthDate && calculateChildAge(values[ids.birthDate], values[childDateOfDeath]);
+  const hasNewAge = [ids.ageYears, ids.ageMonths, ids.ageDays].some((de) => de && answered(values[de]));
+  if (age) {
+    for (const de of [ids.ageYears, ids.ageMonths, ids.ageDays, ids.ageSource]) {
+      if (de) state.disabledFields.add(de);
+    }
+  }
+  if (ids.birthDate && (hasNewAge || age)) state.hiddenFields.add(legacyAgeDays);
+  if (childUnder28Days(values, ids)) {
     def.layout.forEach((sec, idx) => {
       if (/maternal risk factor/i.test(sec.title)) {
         state.hiddenSections.add(idx);
@@ -454,7 +528,16 @@ export const applySkipEffects = (
   meta: Record<string, DeMeta>,
   formId: FormId
 ): Values => {
+  if (formId === "cdr") return {};
   const patch: Values = {};
+  if (formId === "mdr") {
+    for (const choices of deliveryChoices) {
+      const selected = choices.find((de) => de in changed && isYes(values, de, meta));
+      if (selected) {
+        for (const de of choices) if (de !== selected) patch[de] = false;
+      }
+    }
+  }
 
   if (changed[MCCOD.dob] && moment.isMoment(changed[MCCOD.dob])) {
     patch[MCCOD.age] = moment().diff(changed[MCCOD.dob], "years");
@@ -511,6 +594,33 @@ export const applySkipEffects = (
     if (!show) patch[rule.child] = undefined;
   }
 
+  if (formId === "pdr" && perinatalUnknownCause in changed) {
+    if (isTruthyCheckbox(values[perinatalUnknownCause]) || isYes(values, perinatalUnknownCause, meta)) {
+      for (const de of PDR_CAUSE_TICKS) patch[de] = false;
+    }
+  }
+
+  if (formId === "pdr" && perinatalDeathType in changed) {
+    const deathType = optionLabel(perinatalDeathType, values[perinatalDeathType], meta);
+    const stillbirth = /still\s*birth|fresh|macerated/i.test(deathType) && !/neonatal/i.test(deathType);
+    if (stillbirth) {
+      for (const de of [...PDR_NEWBORN_FIELDS, ...PDR_STILLBIRTH_IMPOSSIBLE_CAUSES]) {
+        patch[de] = undefined;
+      }
+    }
+  }
+
+  if (formId === "mdr" && maternalAncAttended in changed) {
+    const ancLabel = optionLabel(maternalAncAttended, values[maternalAncAttended], meta);
+    if (!isYes(values, maternalAncAttended, meta) || /records?\s+not\s+available|unknown/i.test(ancLabel)) {
+      for (const de of MDR_ANC_FOLLOWUPS) patch[de] = undefined;
+    }
+  }
+
+  if (formId === "pdr" && perinatalAncAttended in changed && !isYes(values, perinatalAncAttended, meta)) {
+    for (const de of PDR_ANC_FOLLOWUPS) patch[de] = undefined;
+  }
+
   return patch;
 };
 
@@ -518,7 +628,8 @@ export const computeSkipState = (
   formId: FormId,
   def: FormDefinition,
   values: Values,
-  meta: Record<string, DeMeta>
+  meta: Record<string, DeMeta>,
+  childFieldIds: ChildFieldIds = {}
 ): SkipState => {
   const state = emptySkipState();
 
@@ -533,12 +644,68 @@ export const computeSkipState = (
   applyConditionalChildren(formId, values, meta, state);
   applyLabelConditionals(def, values, meta, state, overridden);
 
+  if (formId === "mdr") {
+    if (optionLabel("NEW_mdr_death_place_type", values.NEW_mdr_death_place_type, meta) === "Before Admission") {
+      for (const de of ["wmNrbtFpcdy", "ByIsCiqkq4v", "vORgqb7tQBu", "jdxl2rdeDEk", "c5kDr80smH8", "IH7NTNcSZYk", "ww21ycTPDb6", "BJXbwUs4tGF"]) {
+        state.hiddenFields.add(de);
+      }
+    }
+    // No ANC / records unavailable → close facility type, risk, meds, investigations.
+    const ancLabel = optionLabel(maternalAncAttended, values[maternalAncAttended], meta);
+    if (!isYes(values, maternalAncAttended, meta) || /records?\s+not\s+available|unknown/i.test(ancLabel)) {
+      for (const de of MDR_ANC_FOLLOWUPS) state.hiddenFields.add(de);
+    }
+    if (!isYes(values, maternalLabour, meta)) {
+      for (const de of ["E0OEw6yVcJm", "NKKunKgeJiD", "pVGyUKsZywW", "tkiEm0lt9cV", "HJhEdW3YNL3"]) state.hiddenFields.add(de);
+    }
+    if (state.hiddenFields.has("E0OEw6yVcJm") || !isYes(values, "E0OEw6yVcJm", meta)) state.hiddenFields.add("v9BgVEytqsi");
+    const delivered = isYes(values, maternalDelivery, meta);
+    if (!delivered) {
+      for (const de of [maternalDeliveryPlace, "XW2CKaAiMKc", ...deliveryChoices.flat()]) state.hiddenFields.add(de);
+    }
+    const place = optionLabel(maternalDeliveryPlace, values[maternalDeliveryPlace], meta);
+    if (!delivered || !/facility|hospital|health cent(?:re|er)|clinic/i.test(place)) state.hiddenFields.add("NEW_mdr_delivery_facility_name");
+    if (!isYes(values, "js6jQi1rx1j", meta) || !isYes(values, "smzNleAK8sl", meta)) state.hiddenFields.add("UEmwYMZK0Uh");
+    state.hiddenFields.delete(maternalPregnancyOutcome);
+    state.hints[maternalPregnancyOutcome] = "Required by DHIS2.";
+  }
+
+  if (formId === "pdr") {
+    if (!isYes(values, perinatalAncAttended, meta)) {
+      for (const de of PDR_ANC_FOLLOWUPS) state.hiddenFields.add(de);
+    }
+    const pregType = optionLabel(perinatalPregnancyType, values[perinatalPregnancyType], meta);
+    if (!/multiple|twin|triplet/i.test(pregType)) {
+      state.hiddenFields.add("NEW_pdr_multiple_babies_count");
+    }
+    const deathType = optionLabel(perinatalDeathType, values[perinatalDeathType], meta);
+    const stillbirth = /still\s*birth|fresh|macerated/i.test(deathType) && !/neonatal/i.test(deathType);
+    if (stillbirth) {
+      for (const de of PDR_NEWBORN_FIELDS) state.hiddenFields.add(de);
+      for (const de of PDR_STILLBIRTH_IMPOSSIBLE_CAUSES) state.hiddenFields.add(de);
+    }
+    if (isTruthyCheckbox(values[perinatalUnknownCause]) || isYes(values, perinatalUnknownCause, meta)) {
+      for (const de of PDR_CAUSE_TICKS) state.hiddenFields.add(de);
+    }
+    if (isTruthyCheckbox(values.Yis06rsFWQz) || isYes(values, "Yis06rsFWQz", meta)) {
+      for (const de of ["RmrshOepF86", "kOCe0LCjbVv", "pimd0GLDogv"]) state.hiddenFields.add(de);
+    }
+    if (!isYes(values, "x7k2caL4psq", meta)) {
+      for (const de of [
+        "mkQMb4ANZ1C", "x7fsCQzTP4G", "HeOmzW0Bj8f", "IELb95GgJhj",
+        "YPDveEOR7Cz", "yCUx2f9ed7R", "CprvAYJIWNv", "QP3u2BU4E9p",
+        "q4YXJgj2sIZ", "LF6ukmshijY", "PlzGmmIbpK5", "bRddgcYH9Qn",
+        "fv703VfWJli", "J3VHBvaXyyb",
+      ]) state.hiddenFields.add(de);
+    }
+  }
+
   if (formId === "mccod" || def.isMccod) {
     applyMccodRules(values, meta, def, state);
   }
 
   if (formId === "cdr") {
-    applyCdrRules(values, def, state);
+    applyCdrRules(values, def, state, childFieldsForDisplay(childFieldIds), meta);
   }
 
   return state;

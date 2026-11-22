@@ -77,9 +77,9 @@
     ]
   },
   "manifest.webapp": {
-    "version": "2.0.0",
-    "name": " Medical Certification of Cause of Death",
-    "description": " Medical Certification of Cause of Death",
+    "version": "4.0.0",
+    "name": "NewICD11 Application",
+    "description": "NewICD11 Application",
     "launch_path": "index.html",
     "icons": {
       "16": "assets/icons/image001.png",
@@ -87,7 +87,7 @@
       "128": "assets/icons/image001.png"
     },
     "developer": {
-      "name": "Simon Kununka",
+      "name": "DHI & Simon Kununka",
       "url": "http://dhis2.org"
     },
     "default_locale": "en",

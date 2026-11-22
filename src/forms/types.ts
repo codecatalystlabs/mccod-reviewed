@@ -53,7 +53,7 @@ export interface ListColumn {
    *  - "status" → renders the linked/certified tag from `de`
    *  - default  → shows the raw/coded value of `de`
    */
-  type?: "value" | "date" | "status" | "datetime" | "maternalLink";
+  type?: "value" | "date" | "status" | "datetime" | "maternalLink" | "reviewStatus";
   /** Optional fixed width in pixels. */
   width?: number;
   /** Text alignment. */

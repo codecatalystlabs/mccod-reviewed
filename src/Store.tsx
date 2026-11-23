@@ -297,7 +297,7 @@ class Store {
 	@observable activeLanguage: any;
 	@observable ICDLang: any = null;
 	@observable programs: any = [];
-	@observable selectedNationality: any;
+	@observable selectedNationality: any = "l4UMmqvSBe5";
 	@observable optionSets: any;
 	@observable page = 1;
 	@observable pageSize = 10;
@@ -874,7 +874,8 @@ class Store {
 
 		// Default the nationality to "National" (l4UMmqvSBe5) so the form opens
 		// ready-to-use, while leaving the selector editable for other cases.
-		if (!this.selectedNationality && this.nationalitySelect.length) {
+		if (this.nationalitySelect.length &&
+			!this.nationalitySelect.some((option: any) => option.id === this.selectedNationality)) {
 			const national = this.nationalitySelect.find(
 				(n: any) =>
 					n?.id === "l4UMmqvSBe5" ||

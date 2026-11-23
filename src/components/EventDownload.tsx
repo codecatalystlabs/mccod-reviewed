@@ -1,12 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Drawer,
+  Modal,
   Select,
   DatePicker,
   Radio,
   Button,
   Progress,
-  Checkbox,
   Tag,
   Divider,
   Empty,
@@ -74,7 +73,6 @@ function buildCsvData(
   return { headers, data };
 }
 
-/** Resolve option set codes → display names for coded data elements. */
 async function loadOptionNameMap(
   engine: any,
   programStageId: string
@@ -105,14 +103,12 @@ const EventDownload = observer(() => {
   const store = useStore();
   const csvRef = useRef<any>(null);
 
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
-  // Programs fetched from DHIS2
   const [allPrograms, setAllPrograms] = useState<Dhis2Program[]>([]);
   const [loadingPrograms, setLoadingPrograms] = useState(false);
   const [selectedProgramIds, setSelectedProgramIds] = useState<string[]>([]);
 
-  // Local org unit for the download (does NOT change global store)
   const [dlOrgUnit, setDlOrgUnit] = useState<string | undefined>(undefined);
   const [ouMode, setOuMode] = useState<OuMode>("DESCENDANTS");
 
@@ -131,7 +127,6 @@ const EventDownload = observer(() => {
 
   const abortRef = useRef(false);
 
-  // Fetch all event programs from DHIS2 when drawer opens
   const fetchPrograms = useCallback(async () => {
     if (allPrograms.length > 0 || loadingPrograms) return;
     setLoadingPrograms(true);
@@ -153,10 +148,9 @@ const EventDownload = observer(() => {
   }, [store.engine, allPrograms.length, loadingPrograms]);
 
   useEffect(() => {
-    if (drawerOpen) fetchPrograms();
-  }, [drawerOpen, fetchPrograms]);
+    if (exportOpen) fetchPrograms();
+  }, [exportOpen, fetchPrograms]);
 
-  // Data element display names for a program stage
   const fetchDeNames = useCallback(
     async (programStageId: string): Promise<Record<string, string>> => {
       try {
@@ -178,7 +172,6 @@ const EventDownload = observer(() => {
     [store.engine]
   );
 
-  // Paginated event fetch for one program + stage
   const fetchAllPages = useCallback(
     async (
       programId: string,
@@ -247,7 +240,6 @@ const EventDownload = observer(() => {
     try {
       const allRows: Record<string, string>[] = [];
 
-      // Build a flat list of (program, stage) pairs to download
       const tasks: { programId: string; programName: string; stageId: string; stageName: string }[] = [];
       for (const pid of selectedProgramIds) {
         const prog = allPrograms.find((p) => p.id === pid);
@@ -298,7 +290,6 @@ const EventDownload = observer(() => {
         );
 
         for (const ev of events) {
-          // Replace option codes with display names
           if (resolveOptionCodes && ev.dataValues) {
             for (const dv of ev.dataValues) {
               const lookup = optionMap[dv.dataElement];
@@ -383,15 +374,19 @@ const EventDownload = observer(() => {
 
   const csvFilename = `events_${moment().format("YYYYMMDD_HHmm")}.csv`;
 
-  // Org unit tree data from the store (already loaded at app boot)
   const orgUnits = store.organisationUnits || [];
+
+  const closeExporter = () => {
+    setExportOpen(false);
+    handleCancel();
+  };
 
   return (
     <>
       <button
         className="tile download-tile"
         style={{ background: "linear-gradient(135deg, #475569 0%, #1e293b 100%)" }}
-        onClick={() => setDrawerOpen(true)}
+        onClick={() => setExportOpen(true)}
       >
         <span className="tile-glow" />
         <span className="tile-badge">Export</span>
@@ -411,31 +406,35 @@ const EventDownload = observer(() => {
         </span>
       </button>
 
-      <Drawer
-        title={null}
-        placement="right"
-        width={560}
-        onClose={() => { setDrawerOpen(false); handleCancel(); }}
-        visible={drawerOpen}
-        className="download-drawer"
-        bodyStyle={{ padding: 0 }}
+      <Modal
+        title="Event Data Export"
+        visible={exportOpen}
+        onCancel={closeExporter}
+        width={680}
+        centered
+        className="download-modal"
+        footer={
+          <>
+            <Button onClick={closeExporter}>Close</Button>
+            <Button
+              type="primary"
+              size="large"
+              loading={downloading}
+              disabled={selectedProgramIds.length === 0}
+              onClick={handleDownload}
+              className="dd-download-btn"
+            >
+              {downloading
+                ? "Downloading..."
+                : `Download${selectedProgramIds.length > 0
+                    ? ` (${selectedProgramIds.length} program${selectedProgramIds.length > 1 ? "s" : ""})`
+                    : ""}`}
+            </Button>
+          </>
+        }
       >
-        <div className="dd-header">
-          <div className="dd-header-icon">
-            <svg viewBox="0 0 24 24" fill="#fff" width="28" height="28">
-              <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
-            </svg>
-          </div>
-          <div>
-            <h2 className="dd-title">Event Data Export</h2>
-            <p className="dd-subtitle">
-              Download events from any DHIS2 event program
-            </p>
-          </div>
-        </div>
-
         <div className="dd-body">
-          {/* ── 1. PROGRAM SELECTION ── */}
+          {/* 1. PROGRAM SELECTION */}
           <div className="dd-section">
             <label className="dd-label">Programs to export</label>
             {loadingPrograms ? (
@@ -453,7 +452,9 @@ const EventDownload = observer(() => {
                   onChange={setSelectedProgramIds}
                   optionFilterProp="children"
                   showSearch
-                  maxTagCount={3}
+                  listHeight={256}
+                  maxTagCount={1}
+                  maxTagTextLength={32}
                   maxTagPlaceholder={(omitted) => `+${omitted.length} more`}
                 >
                   {allPrograms.map((p) => (
@@ -483,7 +484,7 @@ const EventDownload = observer(() => {
                   )}
                 </div>
                 {selectedProgramIds.length > 0 && (
-                  <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  <div className="dd-selected-programs">
                     {selectedProgramIds.map((id) => {
                       const prog = allPrograms.find((p) => p.id === id);
                       return (
@@ -502,7 +503,7 @@ const EventDownload = observer(() => {
 
           <Divider style={{ margin: "16px 0" }} />
 
-          {/* ── 2. ORGANISATION UNIT ── */}
+          {/* 2. ORGANISATION UNIT */}
           <div className="dd-section">
             <label className="dd-label">Organisation unit</label>
             <TreeSelect
@@ -540,7 +541,7 @@ const EventDownload = observer(() => {
 
           <Divider style={{ margin: "16px 0" }} />
 
-          {/* ── 3. DATE RANGE ── */}
+          {/* 3. DATE RANGE */}
           <div className="dd-section">
             <label className="dd-label">Date range</label>
             <RangePicker
@@ -563,7 +564,7 @@ const EventDownload = observer(() => {
 
           <Divider style={{ margin: "16px 0" }} />
 
-          {/* ── 4. EXPORT OPTIONS ── */}
+          {/* 4. EXPORT OPTIONS */}
           <div className="dd-section dd-options-row">
             <div>
               <label className="dd-label">File format</label>
@@ -605,7 +606,7 @@ const EventDownload = observer(() => {
 
           <Divider style={{ margin: "16px 0" }} />
 
-          {/* ── PROGRESS / STATUS ── */}
+          {/* PROGRESS */}
           {downloading && (
             <div className="dd-progress">
               <Spin size="small" />
@@ -639,24 +640,7 @@ const EventDownload = observer(() => {
             </div>
           )}
 
-          {/* ── ACTIONS ── */}
-          <div className="dd-actions">
-            <Button onClick={() => setDrawerOpen(false)}>Close</Button>
-            <Button
-              type="primary"
-              size="large"
-              loading={downloading}
-              disabled={selectedProgramIds.length === 0}
-              onClick={handleDownload}
-              className="dd-download-btn"
-            >
-              {downloading
-                ? "Downloading..."
-                : `Download${selectedProgramIds.length > 0
-                    ? ` (${selectedProgramIds.length} program${selectedProgramIds.length > 1 ? "s" : ""})`
-                    : ""}`}
-            </Button>
-          </div>
+
         </div>
 
         <CSVLink
@@ -665,7 +649,7 @@ const EventDownload = observer(() => {
           filename={csvFilename}
           style={{ display: "none" }}
         />
-      </Drawer>
+      </Modal>
     </>
   );
 });

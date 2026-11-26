@@ -12,6 +12,7 @@ import { EventList } from "./components/EventList";
 import LanguageConfigPage from "./components/LanguageConfigPage";
 import ApiConfigPage from "./components/ApiConfigPage";
 import { Home } from "./components/Home";
+import { Dashboard } from "./dashboard/Dashboard";
 import { DynamicForm } from "./components/DynamicForm";
 
 export const App = observer(() => {
@@ -131,6 +132,8 @@ export const App = observer(() => {
       /> */}
       {store.activeModule === "home" ? (
         <Home />
+      ) : store.activeModule === "dashboard" ? (
+        <Dashboard />
       ) : store.activeModule === "mdr" ||
         store.activeModule === "pdr" ||
         store.activeModule === "cdr" ||

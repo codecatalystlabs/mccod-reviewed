@@ -9,6 +9,7 @@ import { observer } from "mobx-react";
 import { runInAction } from "mobx";
 import moment from "moment";
 import {
+  Alert,
   Button,
   Checkbox,
   Col,
@@ -18,28 +19,37 @@ import {
   Form,
   Input,
   InputNumber,
+  Modal,
   notification,
   Popover,
   Progress,
   Radio,
   Row,
   Select,
+  Space,
   Spin,
   Table,
   Tag,
   TimePicker,
 } from "antd";
 import { useStore } from "../Context";
+import { isTicked, matchOptionCode } from "../forms/legacyValues";
 import { dynamicFormStore, MATERNAL_TO_MCCOD_MAP, CDR_TO_MCCOD_MAP, PERINATAL_TO_MCCOD_MAP } from "../forms/DynamicFormStore";
 import { getFormDefinition, CASE_NUMBER_DE } from "../forms/registry";
 import { answered, childDateOfDeath, childDerivedValues, childFieldsForDisplay, extendChildLayout, formatFacilityStay, isChildReviewOverdue, isPendingChildField } from "../forms/childReview";
-import { FormField, ListColumn } from "../forms/types";
+import { FormField, FormGroup, ListColumn } from "../forms/types";
+import { confirmFlags, flagsByField, mustCorrectFlags, validateReviewForm } from "../forms/reviewValidation";
+import { isMappedPendingDe, toDhis2DeId } from "../forms/pendingDataElements";
 import {
   applySkipEffects,
   computeSkipState,
   emptySkipState,
   isFieldDisabled,
   isFieldVisible,
+  MDR_ADMISSION,
+  MDR_DEATH,
+  MDR_STAY,
+  stayDuration,
 } from "../forms/skipLogic";
 import { LoadingOutlined, InfoCircleOutlined } from "@ant-design/icons";
 import { MccodTableSection } from "./MccodTableSection";
@@ -77,6 +87,34 @@ const NUMERIC = [
   "PERCENTAGE",
   "UNIT_INTERVAL",
 ];
+
+/**
+ * Drop-downs and pickers render their popup inside the field's own column.
+ * Without this, antd appends the popup to <body> and, inside the scrolling
+ * form, it can open at the top of the page or below the visible area.
+ */
+const popupAtField = (node: HTMLElement) => node.parentElement ?? document.body;
+
+/** MCCOD usual-residence drop-downs (values are stored by organisation-unit display name). */
+const RESIDENCE = {
+  region: "zwKo51BEayZ",
+  district: "u44XP9fZweA",
+  subcounty: "t5nTEmlScSt",
+};
+
+/** Sub-counties (level 5) under a district, including those nested under a level-4 unit. */
+const subcountyChoices = (data: any) => {
+  const children: any[] = data?.children ?? [];
+  let units = children.filter((c) => c.level === 5);
+  if (!units.length) {
+    children
+      .filter((c) => c.level === 4)
+      .forEach((unit) => {
+        units = [...units, ...(unit.children ?? []).filter((c: any) => c.level === 5)];
+      });
+  }
+  return units.map((u) => ({ code: u.displayName, name: u.displayName }));
+};
 
 /** Renders a single field's widget based on runtime DHIS2 metadata. */
 export const FieldWidget = observer(
@@ -125,6 +163,29 @@ export const FieldWidget = observer(
       );
     }
 
+    if (field.widget === "yesNoCheck") {
+      const yes = /^yes$/i.test(String(rest.value ?? ""));
+      const no = /^no$/i.test(String(rest.value ?? ""));
+      return (
+        <Space size="large">
+          <Checkbox
+            disabled={disabled}
+            checked={yes}
+            onChange={(e) => rest.onChange?.(e.target.checked ? "Yes" : null)}
+          >
+            Yes
+          </Checkbox>
+          <Checkbox
+            disabled={disabled}
+            checked={no}
+            onChange={(e) => rest.onChange?.(e.target.checked ? "No" : null)}
+          >
+            No
+          </Checkbox>
+        </Space>
+      );
+    }
+
     let options = meta?.options;
     if (
       (!options || !options.length) &&
@@ -140,7 +201,28 @@ export const FieldWidget = observer(
       ];
     }
 
-    if (options && options.length) {
+    // Retired choices stay out of the list (a saved record still shows its own).
+    if (options && field.hideOptions?.length) {
+      const live = new Set((meta?.options || []).map((o) => o.code));
+      const ready = !field.hideOptionsWhen || field.hideOptionsWhen.every((code) => live.has(code));
+      if (ready) {
+        const current = rest.value == null ? "" : String(rest.value);
+        options = options.filter((o) => !field.hideOptions!.includes(o.code) || o.code === current);
+      }
+    }
+
+    // July 2024 paper: ANC "Unknown" → "Records not available"
+    if (options && options.length && field.de === "QidQVyBFspW") {
+      options = options.map((o) =>
+        /^unknown$/i.test(o.name || "")
+          ? { ...o, name: "Records not available" }
+          : o
+      );
+    }
+
+    // A layout-declared choice list stays a drop-down even while it is empty
+    // (cascading pickers fill it once their parent value is chosen).
+    if (options && (options.length || field.options)) {
       const isYesNoOptions =
         options.length >= 2 &&
         options.length <= 4 &&
@@ -154,6 +236,7 @@ export const FieldWidget = observer(
             "true",
             "false",
             "unknown",
+            "records not available",
             "don't know",
             "not known",
             "n/a",
@@ -179,6 +262,7 @@ export const FieldWidget = observer(
           {...rest}
           mode={field.multi ? "multiple" : undefined}
           size="middle"
+          getPopupContainer={popupAtField}
           allowClear
           showSearch
           showArrow
@@ -217,8 +301,9 @@ export const FieldWidget = observer(
           {...rest}
           size="middle"
           disabled={disabled}
+          getPopupContainer={popupAtField}
           style={{ width: "100%" }}
-          disabledDate={(current) => !!current && current.isAfter(moment(), "day")}
+          disabledDate={(current) => !field.allowFuture && !!current && current.isAfter(moment(), "day")}
         />
       );
     }
@@ -229,8 +314,9 @@ export const FieldWidget = observer(
           size="middle"
           showTime
           disabled={disabled}
+          getPopupContainer={popupAtField}
           style={{ width: "100%" }}
-          disabledDate={(current) => !!current && current.isAfter(moment(), "day")}
+          disabledDate={(current) => !field.allowFuture && !!current && current.isAfter(moment(), "day")}
         />
       );
     }
@@ -242,6 +328,7 @@ export const FieldWidget = observer(
           format="HH:mm"
           minuteStep={5}
           disabled={disabled}
+          getPopupContainer={popupAtField}
           style={{ width: "100%" }}
         />
       );
@@ -320,7 +407,7 @@ const displayValue = (field: FormField, record: any): string => {
   const vt = meta?.valueType;
   if (vt === "BOOLEAN")
     return /^true$/i.test(raw) ? "Yes" : /^false$/i.test(raw) ? "No" : raw;
-  if (vt === "TRUE_ONLY") return /^true$/i.test(raw) ? "Yes" : raw;
+  if (vt === "TRUE_ONLY") return isTicked(raw) ? "Yes" : "No";
   if (vt === "DATE")
     return moment(raw).isValid() ? moment(raw).format("DD MMM YYYY") : raw;
   if (vt === "DATETIME")
@@ -342,7 +429,7 @@ const displayValueByDe = (de: string, record: any): string => {
   const vt = meta?.valueType;
   if (vt === "BOOLEAN")
     return /^true$/i.test(raw) ? "Yes" : /^false$/i.test(raw) ? "No" : raw;
-  if (vt === "TRUE_ONLY") return /^true$/i.test(raw) ? "Yes" : raw;
+  if (vt === "TRUE_ONLY") return isTicked(raw) ? "Yes" : "No";
   if (vt === "DATE")
     return moment(raw).isValid() ? moment(raw).format("DD MMM YYYY") : raw;
   return raw;
@@ -773,6 +860,80 @@ export const DynamicForm = observer(() => {
     })();
   }, [baseDef]);
 
+  // MCCOD residence drop-downs. Options come from the organisation-unit
+  // hierarchy and are re-applied after each metadata load.
+  const residenceCache = useRef({
+    regionsReady: false,
+    districtsByRegion: new Map<string, any[]>(),
+    districtIds: new Map<string, string>(),
+    subcounties: new Map<string, { code: string; name: string }[]>(),
+  });
+  const [residenceReady, setResidenceReady] = useState(false);
+  const residenceRegion = formValues[RESIDENCE.region];
+  const residenceDistrict = formValues[RESIDENCE.district];
+  const metaLoading = dynamicFormStore.loadingMeta;
+  const isMccod = def?.id === "mccod";
+
+  useEffect(() => {
+    if (!isMccod || metaLoading) return;
+    let cancelled = false;
+    (async () => {
+      const cache = residenceCache.current;
+      if (!cache.regionsReady) {
+        const res: any = await store.getRegions();
+        if (cancelled || !res?.organisationUnits) return;
+        (res.organisationUnits as any[]).forEach((region) => {
+          cache.districtsByRegion.set(region.displayName, region.children || []);
+          (region.children || []).forEach((d: any) => cache.districtIds.set(d.displayName, d.id));
+        });
+        cache.regionsReady = true;
+      }
+      if (cancelled) return;
+      dynamicFormStore.setFieldOptions(
+        RESIDENCE.region,
+        Array.from(cache.districtsByRegion.keys()).map((name) => ({ code: name, name }))
+      );
+      setResidenceReady(true);
+    })().catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [isMccod, metaLoading, store]);
+
+  useEffect(() => {
+    if (!isMccod || metaLoading || !residenceReady) return;
+    const districts = residenceCache.current.districtsByRegion.get(residenceRegion) ?? [];
+    dynamicFormStore.setFieldOptions(
+      RESIDENCE.district,
+      districts.map((d: any) => ({ code: d.displayName, name: d.displayName }))
+    );
+  }, [isMccod, metaLoading, residenceReady, residenceRegion]);
+
+  useEffect(() => {
+    if (!isMccod || metaLoading || !residenceReady) return;
+    const cache = residenceCache.current;
+    const districtId = residenceDistrict ? cache.districtIds.get(residenceDistrict) : undefined;
+    if (!districtId) {
+      dynamicFormStore.setFieldOptions(RESIDENCE.subcounty, []);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      let options = cache.subcounties.get(districtId);
+      if (!options) {
+        const data: any = await store.engine.link.fetch(
+          `/api/organisationUnits/${districtId}?paging=false&fields=level,id,children[id,displayName,level,children[id,displayName,level]]`
+        );
+        options = subcountyChoices(data);
+        cache.subcounties.set(districtId, options);
+      }
+      if (!cancelled) dynamicFormStore.setFieldOptions(RESIDENCE.subcounty, options);
+    })().catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [isMccod, metaLoading, residenceReady, residenceDistrict]);
+
   // Reload records whenever the selected org unit changes.
   useEffect(() => {
     if (def && mode === "list") dynamicFormStore.loadRecords(def);
@@ -838,6 +999,15 @@ export const DynamicForm = observer(() => {
       childFieldIds
     );
   }, [def, formValues, dynamicFormStore.meta, childFieldIds]);
+
+  // Live red flags: shown on the field as soon as a value is out of range.
+  const reviewFlags = useMemo(
+    () => (def && (def.id === "mdr" || def.id === "pdr")
+      ? validateReviewForm(def.id, formValues, dynamicFormStore.meta, skip.hiddenFields)
+      : []),
+    [def, formValues, dynamicFormStore.meta, skip]
+  );
+  const flagMap = useMemo(() => flagsByField(reviewFlags), [reviewFlags]);
 
   const applicableSectionKeys = useMemo(() => {
     if (!def) return [];
@@ -943,11 +1113,32 @@ export const DynamicForm = observer(() => {
       } else if (vt === "TIME" && out[de]) {
         out[de] = def?.id === "cdr" ? moment(out[de], ["HH:mm:ss", "HH:mm"], true) : moment(out[de], "HH:mm");
       } else if (vt === "TRUE_ONLY") {
-        out[de] = out[de] === true || out[de] === "true";
+        // Legacy records hold "true", "YES" or the answer text itself.
+        out[de] = isTicked(out[de]);
       } else if (vt && DATE_TYPES.includes(vt) && out[de]) {
         out[de] = moment(out[de]);
+      } else if (def?.id === "mccod" && typeof out[de] === "string") {
+        // Older MCCOD answers differ in case ("YES") or wording ("true").
+        const options = dynamicFormStore.meta[de]?.options;
+        if (options?.length) out[de] = matchOptionCode(out[de], options);
       }
     });
+    // A field that replaces an earlier true/false question shows the old answer as Yes/No.
+    def?.layout.forEach((sec) =>
+      sec.groups.forEach((g) =>
+        g.fields.forEach((f) => {
+          if (!f.legacyDe || answered(out[f.de]) || !answered(values[f.legacyDe])) return;
+          const old = String(values[f.legacyDe]).trim().toLowerCase();
+          if (/^(true|yes|1)$/.test(old)) out[f.de] = "Yes";
+          else if (/^(false|no|0)$/.test(old)) out[f.de] = "No";
+        })
+      )
+    );
+    // Duration of stay is always derived from admission and death.
+    if (def?.id === "mdr") {
+      const stay = stayDuration(out[MDR_ADMISSION], out[MDR_DEATH]);
+      if (stay) MDR_STAY.forEach((de, i) => { out[de] = stay[i]; });
+    }
     return def?.id === "cdr" ? { ...out, ...childDerivedValues(out, childFieldIds) } : out;
   };
 
@@ -1046,6 +1237,13 @@ export const DynamicForm = observer(() => {
     }
   };
 
+  /** Open the wizard step that holds a field (used to show a flagged value). */
+  const goToField = (de: string) => {
+    const section = def.layout.findIndex((sec) => sec.groups.some((g) => g.fields.some((f) => f.de === de)));
+    const step = stepKeys.indexOf(String(section));
+    if (step >= 0) setCurrentStep(step);
+  };
+
   const handleSave = async () => {
     const values = collectValues();
     if (def.id === "cdr") {
@@ -1061,12 +1259,53 @@ export const DynamicForm = observer(() => {
       values,
       dynamicFormStore.meta
     );
+    // Red flags: a must-correct value stops the save and jumps to its section;
+    // an unusual value asks the reviewer to confirm.
+    if (def.id === "mdr" || def.id === "pdr") {
+      const flags = validateReviewForm(def.id, values, dynamicFormStore.meta, finalSkip.hiddenFields);
+      const blockers = mustCorrectFlags(flags);
+      if (blockers.length) {
+        goToField(blockers[0].field);
+        notification.error({
+          message: "Correct the highlighted values before saving",
+          description: blockers.map((f) => f.message).filter((m, i, all) => all.indexOf(m) === i).join(" "),
+          duration: 6,
+        });
+        return;
+      }
+      const confirms = confirmFlags(flags);
+      if (confirms.length) {
+        const proceed = await new Promise<boolean>((resolve) => {
+          Modal.confirm({
+            title: "Please confirm unusual values",
+            content: (
+              <ul style={{ paddingLeft: 18, margin: 0 }}>
+                {confirms.map((f) => <li key={f.field + f.message}>{f.message}</li>)}
+              </ul>
+            ),
+            okText: "Save anyway",
+            cancelText: "Go back and check",
+            onOk: () => resolve(true),
+            onCancel: () => resolve(false),
+          });
+        });
+        if (!proceed) {
+          goToField(confirms[0].field);
+          return;
+        }
+      }
+    }
+    // Skip logic closed these questions. Answers still on the record are left
+    // alone; an answer cleared by skip logic is kept as an empty value so the
+    // save removes it from DHIS2.
     const cleaned: Record<string, any> = { ...values };
+    const isEmptyAnswer = (v: any) =>
+      v === undefined || v === null || v === "" || v === false || (Array.isArray(v) && v.length === 0);
     def.layout.forEach((sec, i) => {
       const sectionHidden = finalSkip.hiddenSections.has(i);
       sec.groups.forEach((g) =>
         g.fields.forEach((f) => {
-          if (sectionHidden || finalSkip.hiddenFields.has(f.de))
+          if ((sectionHidden || finalSkip.hiddenFields.has(f.de)) && !isEmptyAnswer(cleaned[f.de]))
             delete cleaned[f.de];
         })
       );
@@ -1319,10 +1558,13 @@ export const DynamicForm = observer(() => {
         const age = dob.isValid() && reference.isValid() && !reference.isBefore(dob, "day")
           ? reference.diff(dob, "years") : undefined;
         if (def.id === "mccod") {
+          // Name is held as parts; the joined full name is kept for lists/certificates.
+          put("Q7VM7swIWb6", info.surname);
+          put("QmcOqkcNTip", info.givenNames);
           put("ZYKmQ9GPOaF", names);
           put("e96GB4CXyd3", sex);
           if (age !== undefined) {
-            updates.roxn33dtLLx = "true";
+            updates.roxn33dtLLx = "Yes";
             updates.RbrUuKFSqkZ = dob;
             updates.q7e7FOXKnOf = age;
           }
@@ -1343,7 +1585,8 @@ export const DynamicForm = observer(() => {
 
       if (address) {
         const addressFields = {
-          mccod: ["zwKo51BEayZ", "bNpMzyShDCX", "u44XP9fZweA", "t5nTEmlScSt"],
+          // village, parish, subcounty, district (live DHIS2 names)
+          mccod: ["dsiwvNQLe5n", "bNpMzyShDCX", "t5nTEmlScSt", "u44XP9fZweA"],
           mdr: ["hcu4LCAMSkz", undefined, "ioXkKfrgCJa", "FHmHV9mElbD"],
           pdr: ["T0f4UTwxd6Q", "dKQIx7sVFbD", "u44XP9fZweA", "t5nTEmlScSt"],
           cdr: ["FA5JmqKlrUT", "m2N3Ea9gdz6", "Q6LIN4M0CU2", "xv0FATnFVms"],
@@ -1394,10 +1637,21 @@ export const DynamicForm = observer(() => {
       ? childDerivedValues({ ...formValues, ...allValues }, childFieldIds)
       : applySkipEffects(
       changed,
-      allValues,
+      { ...formValues, ...allValues },
       dynamicFormStore.meta,
-      def.id
+      def.id,
+      def,
+      formValues
     );
+    // Changing a higher residence level clears the levels below it.
+    if (def.id === "mccod") {
+      if (RESIDENCE.region in changed) {
+        patch[RESIDENCE.district] = null;
+        patch[RESIDENCE.subcounty] = null;
+      } else if (RESIDENCE.district in changed) {
+        patch[RESIDENCE.subcounty] = null;
+      }
+    }
     if (Object.keys(patch).length) {
       form.setFieldsValue(patch);
       setFormValues((prev) => ({ ...prev, ...allValues, ...patch }));
@@ -1500,16 +1754,10 @@ export const DynamicForm = observer(() => {
         );
     }
 
-    return def.layout[si].groups.map((group, gi) => {
-      const groupFields = group.fields.filter((f) => isFieldVisible(f, si, skip));
-      if (!groupFields.length) return null;
-      return (
-        <div className="dform-group" key={gi}>
-          {group.label && <div className="dform-group-label">{group.label}</div>}
-          <Row gutter={[14, 4]}>
-            {groupFields.map((field) => {
+    const renderFieldCol = (field: FormField) => {
               const locked = isFieldDisabled(field, skip) || !!field.readOnly;
               const fieldHint = skip.hints[field.de] || field.hint;
+              const flag = flagMap[field.de];
               return field.icd ? (
                 <Col key={field.de} xs={24} {...fieldSpan(field)}>
                   <div
@@ -1533,7 +1781,8 @@ export const DynamicForm = observer(() => {
                     name={field.de}
                     label={field.label}
                     valuePropName={valuePropName(field)}
-                    help={fieldHint}
+                    validateStatus={flag ? (flag.type === "mustCorrect" ? "error" : "warning") : undefined}
+                    help={flag ? flag.message : fieldHint}
                     className={`dform-item${locked ? " dform-item-locked" : ""}`}
                   >
                       {field.de === "n2mScmFMovq" ? (
@@ -1607,12 +1856,188 @@ export const DynamicForm = observer(() => {
                   </Form.Item>
                 </Col>
               );
-            })}
+    };
+
+    /** A tick box (or any other widget) drawn as a compact list row. */
+    const renderListItem = (field: FormField) => {
+      const locked = isFieldDisabled(field, skip) || !!field.readOnly;
+      const flag = flagMap[field.de];
+      if (dynamicFormStore.meta[field.de]?.valueType === "TRUE_ONLY") {
+        return (
+          <Form.Item
+            key={field.de}
+            name={field.de}
+            valuePropName="checked"
+            validateStatus={flag ? (flag.type === "mustCorrect" ? "error" : "warning") : undefined}
+            help={flag?.message}
+            className="dform-list-item"
+          >
+            <Checkbox disabled={locked}>{field.label}</Checkbox>
+          </Form.Item>
+        );
+      }
+      return <Row key={field.de}>{renderFieldCol(field)}</Row>;
+    };
+
+    const visible = (f: FormField) => isFieldVisible(f, si, skip);
+    const numberOf = (label?: string) => (label || "").match(/^\s*(\d+)\./)?.[1] ?? "";
+    const withoutNumber = (label?: string) => (label || "").replace(/^\s*\d+\.\s*/, "");
+
+    /** Capture style: No. | Factor | Yes | Specify, one row per factor. */
+    const renderFactorsTable = (group: FormGroup, gi: number) => {
+      const rows = group.fields.filter((f) => !f.specifyFor);
+      return (
+        <div className="dform-group" key={gi}>
+          {group.label && <div className="dform-group-label">{group.label}</div>}
+          <div className="mccod-table-container" style={{ overflowX: "auto" }}>
+            <table className="mccod-table dform-factors" aria-label={group.label || "Factors"}>
+              <thead>
+                <tr>
+                  <th scope="col" style={{ width: 48 }}>No.</th>
+                  <th scope="col">Factor</th>
+                  <th scope="col" style={{ width: 70 }}>Yes</th>
+                  <th scope="col" style={{ width: "34%" }}>Specify</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((factor) => {
+                  const specify = group.fields.find((f) => f.specifyFor === factor.de);
+                  const ticked = dynamicFormStore.meta[factor.de]?.valueType === "TRUE_ONLY";
+                  const flag = flagMap[factor.de];
+                  return (
+                    <tr key={factor.de}>
+                      <td>{numberOf(factor.label)}</td>
+                      <td>{withoutNumber(factor.label)}</td>
+                      {ticked ? (
+                        <>
+                          <td>
+                            <Form.Item name={factor.de} valuePropName="checked" noStyle>
+                              <Checkbox disabled={isFieldDisabled(factor, skip)} aria-label={factor.label} />
+                            </Form.Item>
+                          </td>
+                          <td>
+                            {specify && visible(specify) ? (
+                              <Form.Item name={specify.de} noStyle>
+                                <Input size="small" aria-label={specify.label} />
+                              </Form.Item>
+                            ) : null}
+                          </td>
+                        </>
+                      ) : (
+                        <td colSpan={2}>
+                          <Form.Item
+                            name={factor.de}
+                            noStyle
+                          >
+                            <FieldWidget field={factor} form={form} disabled={isFieldDisabled(factor, skip)} />
+                          </Form.Item>
+                          {flag && <div className="dform-inline-flag">{flag.message}</div>}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    };
+
+    /** Table of 5 recommendations. Row n+1 opens once row n has an answer. */
+    const renderRecommendationsTable = (group: FormGroup, gi: number) => {
+      const rows: FormField[][] = [];
+      for (let i = 0; i < group.fields.length; i += 4) rows.push(group.fields.slice(i, i + 4));
+      const filled = (row: FormField[]) => row.some((f) => answered(formValues[f.de]));
+      const open = rows.filter((row, index) => index === 0 || filled(rows[index - 1]) || filled(row));
+      const columns = ["Issue or gap", "Recommendation", "Responsible person", "Timeframe"];
+      return (
+        <div className="dform-group" key={gi}>
+          {group.label && <div className="dform-group-label">{group.label}</div>}
+          <div className="mccod-table-container" style={{ overflowX: "auto" }}>
+            <table className="mccod-table dform-recommendations" aria-label="Recommendations" style={{ minWidth: 720 }}>
+              <thead>
+                <tr>
+                  <th scope="col" style={{ width: 48 }}>No.</th>
+                  {columns.map((title) => <th key={title} scope="col">{title}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {open.map((row, index) => (
+                  <tr key={row[0].de}>
+                    <td>{numberOf(row[0].label) || index + 1}</td>
+                    {row.map((field) => (
+                      <td key={field.de}>
+                        <Form.Item name={field.de} noStyle>
+                          <FieldWidget
+                            field={field}
+                            form={form}
+                            disabled={isFieldDisabled(field, skip) || field.readOnly}
+                            aria-label={field.label}
+                          />
+                        </Form.Item>
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {open.length < rows.length && (
+            <div className="dform-field-hint">The next row opens once this one has an answer.</div>
+          )}
+        </div>
+      );
+    };
+
+    /** Sub-groups drawn side by side, each with its own heading. */
+    const renderColumnsGroup = (group: FormGroup, gi: number) => {
+      const columns = (group.columns || []).filter((column) => column.fields.some(visible));
+      const span = Math.max(8, Math.floor(24 / Math.max(1, columns.length)));
+      return (
+        <div className="dform-group" key={gi}>
+          {group.label && <div className="dform-group-label">{group.label}</div>}
+          <Row gutter={[24, 4]}>
+            {columns.map((column, ci) => (
+              <Col key={ci} xs={24} md={span}>
+                {column.label && <div className="dform-subgroup-label">{column.label}</div>}
+                {column.fields.filter(visible).map(renderListItem)}
+              </Col>
+            ))}
           </Row>
+        </div>
+      );
+    };
+
+    return def.layout[si].groups.map((group, gi) => {
+      const groupFields = group.fields.filter(visible);
+      if (!groupFields.length) return null;
+      if (group.table === "factors") return renderFactorsTable(group, gi);
+      if (group.table === "recommendations") return renderRecommendationsTable(group, gi);
+      if (group.columns && group.columns.length) return renderColumnsGroup(group, gi);
+      return (
+        <div className="dform-group" key={gi}>
+          {group.label && <div className="dform-group-label">{group.label}</div>}
+          <Row gutter={[14, 4]}>{groupFields.map(renderFieldCol)}</Row>
         </div>
       );
     });
   };
+
+  // Questions shown on the form whose data element is not on the programme
+  // stage yet. DHIS2 would reject them, so the save leaves them out silently;
+  // tell the reviewer instead.
+  const unsavedQuestions: string[] = [];
+  if ((def.id === "mdr" || def.id === "pdr") && !dynamicFormStore.loadingMeta && dynamicFormStore.stageDataElements.size > 0) {
+    def.layout.forEach((sec, si) => {
+      if (/CERTIFIED CAUSE|ICD-11 certificate/i.test(sec.title)) return;
+      sec.groups.forEach((g) => g.fields.forEach((f) => {
+        if (!isFieldVisible(f, si, skip) || f.de === "ZkNDFfFSTYg" || f.readOnly) return;
+        const resolved = isMappedPendingDe(f.de) ? toDhis2DeId(f.de) : f.de;
+        if (!dynamicFormStore.stageDataElements.has(resolved)) unsavedQuestions.push(f.label || f.de);
+      }));
+    });
+  }
 
   const clampedStep = Math.min(currentStep, Math.max(0, stepKeys.length - 1));
   const activeStepKey = stepKeys[clampedStep];
@@ -1638,6 +2063,14 @@ export const DynamicForm = observer(() => {
             <button className="dform-link" onClick={store.goHome}>
               ← All forms
             </button>
+            {store.returnToDashboard && (
+              <>
+                <span className="dform-sep">/</span>
+                <button className="dform-link" onClick={() => store.openModule("dashboard")}>
+                  ← Dashboard
+                </button>
+              </>
+            )}
             <span className="dform-sep">/</span>
             <span className="dform-hero-name">{def.title}</span>
           </div>
@@ -1768,6 +2201,25 @@ export const DynamicForm = observer(() => {
                 {def.isMccod && def.caseNumberField && (
                   <MccodToMaternalLinkageBanner
                     caseNumber={resolvedCaseNumber}
+                  />
+                )}
+
+                {unsavedQuestions.length > 0 && (
+                  <Alert
+                    className="dform-unsaved-alert"
+                    type="warning"
+                    showIcon
+                    message={`${unsavedQuestions.length} question${unsavedQuestions.length === 1 ? "" : "s"} on this form cannot be saved yet`}
+                    description={
+                      <>
+                        Their data elements are not on the DHIS2 programme stage, so answers to them are not stored.
+                        Ask a DHIS2 administrator to run the retest metadata script.
+                        <div className="dform-unsaved-list">
+                          {unsavedQuestions.slice(0, 12).join("; ")}
+                          {unsavedQuestions.length > 12 ? `; and ${unsavedQuestions.length - 12} more` : ""}
+                        </div>
+                      </>
+                    }
                   />
                 )}
 

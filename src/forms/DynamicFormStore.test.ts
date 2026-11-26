@@ -70,19 +70,20 @@ test("saves a facility draft, completes the same event, and retains an inactive 
 test("maternal review skips inapplicable questions and keeps pregnancy outcome visible", () => {
   const def = getFormDefinition("mdr");
   const values = {
-    NEW_mdr_death_place_type: "Before Admission",
+    NEW_mdr_death_place_type: "Home",
     iAgu1y93XAB: "No", J11gxMDNvv7: "No", E0OEw6yVcJm: "Yes",
-    PbayNOhXnyx: "No", js6jQi1rx1j: "No", smzNleAK8sl: "Yes",
+    PbayNOhXnyx: "No", NEW_mdr_autopsy_requested: "No",
     QidQVyBFspW: "No",
   };
   const skip = computeSkipState("mdr", def, values, {});
   expect(Array.from(skip.hiddenFields)).toEqual(expect.arrayContaining([
     "c5kDr80smH8", "eJwpqR9t7YM", "E0OEw6yVcJm", "v9BgVEytqsi",
-    "TKWaMxLDj7J", "smzNleAK8sl", "UEmwYMZK0Uh",
+    "TKWaMxLDj7J", "NEW_mdr_autopsy_performed", "UEmwYMZK0Uh",
     "a5fh4wtDzmi", "vVP5ClqKkHQ",
   ]));
-  expect(skip.hiddenFields.has("NEW_mdr_facility_level")).toBe(false);
-  expect(skip.hiddenFields.has(maternalPregnancyOutcome)).toBe(false);
+  // No delivery closes the outcome (the save records "Not Delivered") and everything after birth.
+  expect(skip.hiddenFields.has(maternalPregnancyOutcome)).toBe(true);
+  expect(computeSkipState("mdr", def, {}, {}).hiddenFields.has(maternalPregnancyOutcome)).toBe(false);
   expect(applySkipEffects({ TKWaMxLDj7J: true }, { TKWaMxLDj7J: true }, {}, "mdr").kHdz10PWtjp).toBe(false);
 });
 
@@ -90,11 +91,12 @@ test("perinatal stillbirth hides newborn questions and unknown cause clears othe
   const def = getFormDefinition("pdr");
   const stillbirth = computeSkipState("pdr", def, { TiPl1iLI30H: "Fresh stillbirth" }, {});
   expect(Array.from(stillbirth.hiddenFields)).toEqual(expect.arrayContaining([
-    "RmrshOepF86", "x7k2caL4psq", "qaJDxXfEWPv", "Q6HnSrUTl39", "jSaonaOE68O",
+    "NEW_pdr_apgar_1", "x7k2caL4psq", "qaJDxXfEWPv", "Q6HnSrUTl39", "jSaonaOE68O",
+    "rjoVXlCWLYM", "q4YXJgj2sIZ", "NEW_pdr_resus_nursing_assistant", "H34bcwaOliX",
   ]));
   const unknown = computeSkipState("pdr", def, { Y5T6DMJiZPJ: true }, {});
   expect(unknown.hiddenFields.has("apgGGC11v8Y")).toBe(true);
-  expect(applySkipEffects({ Y5T6DMJiZPJ: true }, { Y5T6DMJiZPJ: true }, {}, "pdr").NEW_3B8Z).toBe(false);
+  expect(applySkipEffects({ Y5T6DMJiZPJ: true }, { Y5T6DMJiZPJ: true }, {}, "pdr").apgGGC11v8Y).toBe(false);
 });
 
 test("maternal Tracker submissions reuse nationality and omit unchecked TRUE_ONLY fields", async () => {

@@ -63,17 +63,26 @@ test("growth requires all three prerequisites and screening details require Yes"
     developmentPerformed: "development", developmentFindings: "findings",
     tbScreened: "tb", tbDetails: "tbDetails", hbsStatus: "test", hbsResult: "result",
   };
-  const values = { stable: "NO", ward: "YES", appropriate: "YES", development: "YES", tb: "UNKNOWN", test: "REQUESTED" };
+  const values = { stable: "No", ward: "Yes", appropriate: "Yes", development: true, tb: "Unknown", test: "Requested" };
   expect(hiddenChildFields(values, ids)).toEqual(expect.arrayContaining(["development", "findings", "tbDetails", "result"]));
-  expect(hiddenChildFields({ ...values, stable: "YES", tb: "YES", test: "DONE" }, ids)).toEqual([]);
+  expect(hiddenChildFields({ ...values, stable: "Yes", tb: "Yes", test: "Done" }, ids)).toEqual([]);
 });
 
 test("checks applicable Apgar scores and requires details for affirmative completion", () => {
   const ids = { apgarAssessed: "apgar", apgarFive: "score", complicationDetails: "details" };
-  const values = { apgar: "YES", score: 11, KWBvJMz69gN: "YES" };
+  const values = { apgar: "Yes", score: 11, KWBvJMz69gN: "Yes" };
   expect(validateChildReview(values, ids, () => true)).toHaveLength(2);
   expect(validateChildReview({ ...values, score: 10 }, ids, () => true, {}, false)).toEqual([]);
-  expect(validateChildReview({ apgar: "UNKNOWN", score: 11 }, ids, () => false)).toEqual([]);
+  expect(validateChildReview({ apgar: "Unknown", score: 11 }, ids, () => false)).toEqual([]);
+});
+
+test("Apgar Yes shows scores and Apgar No shows cry comment fields", () => {
+  const ids = {
+    apgarAssessed: "apgar", apgarOne: "one", apgarFive: "five",
+    immediateCry: "cry", birthEvidence: "evidence",
+  };
+  expect(hiddenChildFields({ apgar: "Yes" }, ids)).toEqual(expect.arrayContaining(["cry", "evidence"]));
+  expect(hiddenChildFields({ apgar: "No" }, ids)).toEqual(expect.arrayContaining(["one", "five"]));
 });
 
 test("asks about the previous admission before physical examination", () => {

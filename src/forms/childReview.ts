@@ -13,8 +13,20 @@ type ChildFieldKey = keyof typeof childFields;
 export type ChildFieldIds = Partial<Record<ChildFieldKey, string>>;
 type Values = Record<string, any>;
 
-const ageSources = childFields.ageSource.options;
+const ageSources = ["CALCULATED", "CAREGIVER_REPORTED", "ESTIMATED"] as const;
 const entries = Object.keys(childFields) as ChildFieldKey[];
+
+/** Affirmative answers across TEXT option sets and BOOLEAN DEs. */
+const isAffirmative = (value: any) =>
+  value === true || value === "true" || /^yes$/i.test(String(value ?? "").trim());
+
+const matchesControl = (value: any, expected: string) => {
+  if (/^(yes|true)$/i.test(expected)) return isAffirmative(value);
+  if (/^no$/i.test(expected) || expected === "false") {
+    return value === false || value === "false" || /^no$/i.test(String(value ?? "").trim());
+  }
+  return String(value ?? "") === expected;
+};
 
 export function resolveChildFields(elements: any[]): ChildFieldIds {
   const ids: ChildFieldIds = {};
@@ -73,16 +85,19 @@ const assessmentKeys: ChildFieldKey[] = [
   "growthFindings", "developmentFindings", "assessmentReason",
 ];
 const controlledFollowUps: Partial<Record<ChildFieldKey, { key: ChildFieldKey; value: string }>> = {
-  tbDetails: { key: "tbScreened", value: "YES" },
-  scdDetails: { key: "scdScreened", value: "YES" },
-  disabilityDetails: { key: "disabilityScreened", value: "YES" },
-  growthFindings: { key: "growthPerformed", value: "YES" },
-  developmentFindings: { key: "developmentPerformed", value: "YES" },
-  apgarOne: { key: "apgarAssessed", value: "YES" },
-  apgarFive: { key: "apgarAssessed", value: "YES" },
+  tbDetails: { key: "tbScreened", value: "Yes" },
+  scdDetails: { key: "scdScreened", value: "Yes" },
+  disabilityDetails: { key: "disabilityScreened", value: "Yes" },
+  growthFindings: { key: "growthPerformed", value: "Yes" },
+  developmentFindings: { key: "developmentPerformed", value: "Yes" },
+  // Apgar Yes → score boxes; Apgar No → cry + comment
+  apgarOne: { key: "apgarAssessed", value: "Yes" },
+  apgarFive: { key: "apgarAssessed", value: "Yes" },
+  immediateCry: { key: "apgarAssessed", value: "No" },
+  birthEvidence: { key: "apgarAssessed", value: "No" },
   otherHistoryDetails: { key: "otherHistory", value: "true" },
-  hbsResult: { key: "hbsStatus", value: "DONE" },
-  geneXpertResult: { key: "geneXpertStatus", value: "DONE" },
+  hbsResult: { key: "hbsStatus", value: "Done" },
+  geneXpertResult: { key: "geneXpertStatus", value: "Done" },
 };
 
 const pendingFieldPrefix = "pending-cdsr-";
@@ -95,7 +110,7 @@ export function childFieldsForDisplay(ids: ChildFieldIds): ChildFieldIds {
   }
   for (const key of entries) {
     const rule = controlledFollowUps[key];
-    const hasParent = childFollowUps[key] || (rule?.value === "YES" && ids[rule.key]);
+    const hasParent = childFollowUps[key] || (rule && ids[rule.key]);
     if (!ids[key] && hasParent && ["TEXT", "LONG_TEXT"].includes(childFields[key].type) &&
       !("options" in childFields[key])) {
       displayIds[key] = pendingFieldPrefix + key;
@@ -108,14 +123,17 @@ export function hiddenChildFields(values: Values, ids: ChildFieldIds): string[] 
   const hiddenKeys: ChildFieldKey[] = [];
   const get = (key: ChildFieldKey) => ids[key] ? values[ids[key]!] : undefined;
   for (const [key, rule] of Object.entries(controlledFollowUps)) {
-    if (rule && String(get(rule.key)) !== rule.value) hiddenKeys.push(key as ChildFieldKey);
+    if (rule && !matchesControl(get(rule.key), rule.value)) hiddenKeys.push(key as ChildFieldKey);
   }
-  const assessed = [get("growthPerformed"), get("developmentPerformed")];
-  if (!assessed.includes("YES")) hiddenKeys.push("growthAssessmentTime");
-  if (!assessed.includes("NO")) hiddenKeys.push("assessmentReason");
-  const stabilizedInWard = get("stabilized") === "YES" && get("ward") === "YES";
+  const growthYes = isAffirmative(get("growthPerformed"));
+  const developmentYes = isAffirmative(get("developmentPerformed"));
+  const growthNo = matchesControl(get("growthPerformed"), "No");
+  const developmentNo = matchesControl(get("developmentPerformed"), "No");
+  if (!growthYes && !developmentYes) hiddenKeys.push("growthAssessmentTime");
+  if (!growthNo && !developmentNo) hiddenKeys.push("assessmentReason");
+  const stabilizedInWard = matchesControl(get("stabilized"), "Yes") && matchesControl(get("ward"), "Yes");
   if (!stabilizedInWard) hiddenKeys.push("assessmentAppropriate");
-  if (!stabilizedInWard || get("assessmentAppropriate") !== "YES") {
+  if (!stabilizedInWard || !matchesControl(get("assessmentAppropriate"), "Yes")) {
     hiddenKeys.push(...assessmentKeys);
   }
   return hiddenKeys.map((key) => ids[key]).filter((id): id is string => !!id);
@@ -337,7 +355,8 @@ export function validateChildReview(
     ((ids.ageYears && Number(values[ids.ageYears]) > 0) || (ids.ageMonths && Number(values[ids.ageMonths]) > 0))) {
     errors.push("Completed neonatal days require zero completed years and months.");
   }
-  if (ids.ageSource && ranges.some(([de]) => de && answered(values[de])) && !ageSources.includes(values[ids.ageSource])) {
+  if (ids.ageSource && ranges.some(([de]) => de && answered(values[de])) &&
+    !(ageSources as readonly string[]).includes(String(values[ids.ageSource]))) {
     errors.push("Select the source of the child's age.");
   }
   if (ids.ageSource && values[ids.ageSource] === "CALCULATED" &&

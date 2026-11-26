@@ -1,10 +1,11 @@
 /**
- * Placeholder data elements used in MDR/PDR layouts before real DHIS2 UIDs exist.
+ * Placeholder data elements used in MDR/PDR layouts before / alongside real DHIS2 UIDs.
  *
- * Create each DE in DHIS2 (Matching valueType + option set), assign it to the
- * form's program stage, then paste the 11-char UID into PENDING_DE_UIDS below.
- * Leave the layout keys as NEW_* — remapping happens at save/load time.
+ * Layouts keep stable NEW_* keys. PENDING_DE_UIDS remaps at save/load time.
+ * Fallback options below are used when the live DE has no option set yet.
  */
+
+import { RETEST_DATA_ELEMENTS, RETEST_DE_UIDS } from "./retestDataElements";
 
 export type PendingForm = "mdr" | "pdr";
 
@@ -15,97 +16,43 @@ export interface PendingDataElement {
   /** Paper form item (MCH020 / MCH017 July 2024). */
   paperItem: string;
   name: string;
-  valueType: "TEXT" | "LONG_TEXT" | "INTEGER" | "BOOLEAN" | "TRUE_ONLY" | "DATE" | "DATETIME";
-  /** Option codes/names when an option set is required. */
+  valueType: "TEXT" | "LONG_TEXT" | "INTEGER" | "INTEGER_ZERO_OR_POSITIVE" | "NUMBER" | "BOOLEAN" | "TRUE_ONLY" | "DATE" | "DATETIME" | "TIME";
+  /** Option codes/names when an option set is required / used as fallback. */
   options?: { code: string; name: string }[];
   /** In layouts.json today? */
   inLayout: boolean;
-  /** Force-hidden by skipLogic today? */
-  forceHidden?: boolean;
   notes?: string;
 }
 
-/** Paste real DHIS2 UIDs here once created. Keys = placeholder ids. */
+/**
+ * Real DHIS2 UIDs. Keys MUST be the NEW_* placeholders used in layouts.json.
+ * Confirmed on stages YXed7PnLRco (MDR) and CGz50G2MY16 (PDR).
+ */
 export const PENDING_DE_UIDS: Record<string, string> = {
   // --- MCH020 (MDR) ---
-  // NEW_mdr_notif_sent: "",
-  // NEW_mdr_facility_level: "",
-  // NEW_mdr_ownership: "",
-  // NEW_mdr_nationality: "",
-  // NEW_mdr_death_place_type: "",
-  // NEW_mdr_delivery_facility_name: "",
-  // NEW_mdr_reviewer_details: "",
-  // NEW_mdr_record_legibility: "", // meta only; MDR layout already uses r5yWFdUMvnH
+  NEW_mdr_death_place_type: "sng0ADbyiaD",
+  NEW_mdr_delivery_facility_name: "quUGi5FzvQD",
+  NEW_mdr_reviewer_details: "PFX8QLFkHPW",
+  NEW_mdr_record_legibility: "GGmkUtIUudN",
 
   // --- MCH017 (PDR) ---
-  // NEW_pdr_mother_nin: "",
-  // NEW_pdr_facility_level: "",
-  // NEW_pdr_multiple_babies_count: "",
-  // NEW_pdr_blood_group: "",
-  // NEW_pdr_rhesus_factor: "",
-  // NEW_pdr_blood_transfusion: "",
-  // NEW_3B8Z: "",
-  // NEW_pdr_record_legibility: "",
-  // NEW_pdr_reviewer_details: "",
-  // NEW_pdr_notif_sent: "",
-  // NEW_pdr_review_date: "",
-  // NEW_pdr_neonatal_admission_time: "",
+  NEW_pdr_mother_nin: "vBw7yUMmNqE",
+  NEW_pdr_multiple_babies_count: "mpkn0DcwYJ4",
+  NEW_pdr_blood_group: "MgfCM5suH25",
+  NEW_pdr_rhesus_factor: "bV4o7i4z3by",
+  NEW_pdr_blood_transfusion: "QoQK1LYwt8r",
+  NEW_pdr_review_date: "Xb6hXkvGn5S",
+  NEW_pdr_record_legibility: "mtRKyyYI43Z",
+  NEW_pdr_reviewer_details: "W0xhCBT435Y",
+  NEW_pdr_neonatal_admission_time: "VsTOk8MFAc2",
+
+  // --- 24 Nov 2026 retest: created by scripts/apply-retest-metadata.js ---
+  ...RETEST_DE_UIDS,
 };
 
 export const PENDING_DATA_ELEMENTS: PendingDataElement[] = [
+  ...RETEST_DATA_ELEMENTS,
   // —— MCH020 Maternal (MDR) ——
-  {
-    placeholder: "NEW_mdr_notif_sent",
-    form: "mdr",
-    paperItem: "Notification",
-    name: "Was the maternal death notification form completed and sent?",
-    valueType: "BOOLEAN",
-    inLayout: true,
-  },
-  {
-    placeholder: "NEW_mdr_facility_level",
-    form: "mdr",
-    paperItem: "1.4",
-    name: "Level of health facility",
-    valueType: "TEXT",
-    options: [
-      { code: "National Referral Hospital", name: "National Referral Hospital" },
-      { code: "Regional Referral Hospital", name: "Regional Referral Hospital" },
-      { code: "General Hospital", name: "General Hospital" },
-      { code: "HC IV", name: "HC IV" },
-      { code: "HC III", name: "HC III" },
-      { code: "Private Maternity", name: "Private Maternity" },
-      { code: "Other-specify", name: "Other-specify" },
-    ],
-    inLayout: true,
-  },
-  {
-    placeholder: "NEW_mdr_ownership",
-    form: "mdr",
-    paperItem: "1.5",
-    name: "Facility Ownership",
-    valueType: "TEXT",
-    options: [
-      { code: "Government", name: "Government" },
-      { code: "Private for profit", name: "Private for profit" },
-      { code: "PNFP", name: "PNFP" },
-    ],
-    inLayout: true,
-  },
-  {
-    placeholder: "NEW_mdr_nationality",
-    form: "mdr",
-    paperItem: "2.2",
-    name: "Nationality",
-    valueType: "TEXT",
-    options: [
-      { code: "National", name: "National" },
-      { code: "Refugee", name: "Refugee" },
-      { code: "Foreigner", name: "Foreigner" },
-    ],
-    inLayout: true,
-    notes: "Tracker nationality category combo may already cover this — confirm before creating.",
-  },
   {
     placeholder: "NEW_mdr_death_place_type",
     form: "mdr",
@@ -113,11 +60,13 @@ export const PENDING_DATA_ELEMENTS: PendingDataElement[] = [
     name: "Where did the death occur?",
     valueType: "TEXT",
     options: [
-      { code: "At the facility after Admission", name: "At the facility after Admission" },
-      { code: "Before Admission", name: "Before Admission" },
+      { code: "HealthFacility", name: "Health Facility" },
+      { code: "Home", name: "Home" },
+      { code: "In_transit_from_Home", name: "In transit from Home" },
+      { code: "During_Referral", name: "During Referral" },
     ],
     inLayout: true,
-    notes: "Drives before-admission skip logic; must persist or skips break on reload.",
+    notes: "Non-facility places hide admission fields.",
   },
   {
     placeholder: "NEW_mdr_delivery_facility_name",
@@ -132,9 +81,8 @@ export const PENDING_DATA_ELEMENTS: PendingDataElement[] = [
     form: "mdr",
     paperItem: "Completed by",
     name: "Reviewer Details (Name / Contact / Date)",
-    valueType: "LONG_TEXT",
+    valueType: "TEXT",
     inLayout: true,
-    notes: "Review wants 5 separate fields later; create this LONG_TEXT for now.",
   },
   {
     placeholder: "NEW_mdr_record_legibility",
@@ -146,8 +94,7 @@ export const PENDING_DATA_ELEMENTS: PendingDataElement[] = [
       { code: "Good", name: "Good" },
       { code: "Poor", name: "Poor" },
     ],
-    inLayout: false,
-    notes: "Fallback meta only — MDR layout already uses real DE r5yWFdUMvnH. Do not create unless replacing that DE.",
+    inLayout: true,
   },
 
   // —— MCH017 Perinatal (PDR) ——
@@ -157,24 +104,6 @@ export const PENDING_DATA_ELEMENTS: PendingDataElement[] = [
     paperItem: "1.1.3",
     name: "Mother NIN",
     valueType: "TEXT",
-    inLayout: true,
-    notes: "Also explicitly stripped on save until a real UID is mapped.",
-  },
-  {
-    placeholder: "NEW_pdr_facility_level",
-    form: "pdr",
-    paperItem: "1.4",
-    name: "Level of health facility",
-    valueType: "TEXT",
-    options: [
-      { code: "NRH", name: "National Referral Hospital" },
-      { code: "RRH", name: "Regional Referral Hospital" },
-      { code: "GH", name: "General Hospital" },
-      { code: "HC IV", name: "HC IV" },
-      { code: "HC III", name: "HC III" },
-      { code: "HC II", name: "HC II" },
-      { code: "Others", name: "Others (specify)" },
-    ],
     inLayout: true,
   },
   {
@@ -216,17 +145,13 @@ export const PENDING_DATA_ELEMENTS: PendingDataElement[] = [
     form: "pdr",
     paperItem: "2.5.9.2",
     name: "Blood Transfusion During Pregnancy",
-    valueType: "BOOLEAN",
+    valueType: "TEXT",
+    options: [
+      { code: "Yes", name: "Yes" },
+      { code: "No", name: "No" },
+    ],
     inLayout: true,
-  },
-  {
-    placeholder: "NEW_3B8Z",
-    form: "pdr",
-    paperItem: "4.1a",
-    name: "3B8Z Bleeding disorders (specify)",
-    valueType: "TRUE_ONLY",
-    inLayout: true,
-    notes: "Prefer TRUE_ONLY to match other cause ticks; fallback meta used BOOLEAN.",
+    notes: "Live DE is TEXT without option set — fallback Yes/No used in UI.",
   },
   {
     placeholder: "NEW_pdr_record_legibility",
@@ -245,15 +170,7 @@ export const PENDING_DATA_ELEMENTS: PendingDataElement[] = [
     form: "pdr",
     paperItem: "Completed by",
     name: "Reviewer Details (Name / Contact / Date)",
-    valueType: "LONG_TEXT",
-    inLayout: true,
-  },
-  {
-    placeholder: "NEW_pdr_notif_sent",
-    form: "pdr",
-    paperItem: "Notification",
-    name: "Was the perinatal death notification form completed and sent/captured?",
-    valueType: "BOOLEAN",
+    valueType: "TEXT",
     inLayout: true,
   },
   {
@@ -268,8 +185,8 @@ export const PENDING_DATA_ELEMENTS: PendingDataElement[] = [
     placeholder: "NEW_pdr_neonatal_admission_time",
     form: "pdr",
     paperItem: "3.8.1.1",
-    name: "If Neonatal death, Date and time of Admission",
-    valueType: "DATETIME",
+    name: "If Neonatal death, time of Admission",
+    valueType: "TIME",
     inLayout: true,
   },
 ];

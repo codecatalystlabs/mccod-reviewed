@@ -22,12 +22,7 @@
   "ageSource": {
     "code": "CDSR_AGE_SOURCE",
     "type": "TEXT",
-    "label": "Source of age",
-    "options": [
-      "CALCULATED",
-      "CAREGIVER_REPORTED",
-      "ESTIMATED"
-    ]
+    "label": "Source of age"
   },
   "childNin": {
     "code": "CDSR_CHILD_NIN",
@@ -68,11 +63,7 @@
     "code": "CDSR_REFERRAL_DOCUMENTS",
     "type": "TEXT",
     "label": "Was referral documentation available?",
-    "options": [
-      "YES",
-      "NO",
-      "UNKNOWN"
-    ]
+    "options": ["Yes", "No", "Unknown"]
   },
   "previousFacility": {
     "code": "CDSR_PREVIOUS_ADMISSION_FACILITY",
@@ -113,12 +104,7 @@
     "code": "CDSR_TB_SCREENED",
     "type": "TEXT",
     "label": "Was the child screened for TB?",
-    "options": [
-      "YES",
-      "NO",
-      "UNKNOWN",
-      "NOT_ASSESSED"
-    ]
+    "options": ["Yes", "No", "Unknown", "Not_Assessed"]
   },
   "tbDetails": {
     "code": "CDSR_TB_SCREENING_DETAILS",
@@ -129,12 +115,7 @@
     "code": "CDSR_SCD_SCREENED",
     "type": "TEXT",
     "label": "Was the child screened for sickle cell disease?",
-    "options": [
-      "YES",
-      "NO",
-      "UNKNOWN",
-      "NOT_ASSESSED"
-    ]
+    "options": ["Yes", "No", "Unknown", "Not_Assessed"]
   },
   "scdDetails": {
     "code": "CDSR_SCD_SCREENING_DETAILS",
@@ -145,12 +126,7 @@
     "code": "CDSR_DISABILITY_SCREENED",
     "type": "TEXT",
     "label": "Was the child screened for disability?",
-    "options": [
-      "YES",
-      "NO",
-      "UNKNOWN",
-      "NOT_ASSESSED"
-    ]
+    "options": ["Yes", "No", "Unknown", "Not_Assessed"]
   },
   "disabilityDetails": {
     "code": "CDSR_DISABILITY_SCREENING_DETAILS",
@@ -161,49 +137,29 @@
     "code": "CDSR_STABILIZED",
     "type": "TEXT",
     "label": "Was the child stabilized?",
-    "options": [
-      "YES",
-      "NO",
-      "UNKNOWN"
-    ]
+    "options": ["Yes", "No", "Unknown"]
   },
   "ward": {
     "code": "CDSR_ADMITTED_TO_WARD",
     "type": "TEXT",
     "label": "Was the child admitted to a ward or subsequent assessment location?",
-    "options": [
-      "YES",
-      "NO",
-      "UNKNOWN"
-    ]
+    "options": ["Yes", "No", "Unknown"]
   },
   "assessmentAppropriate": {
     "code": "CDSR_GROWTH_ASSESSMENT_APPROPRIATE",
     "type": "TEXT",
     "label": "Was assessment appropriate and possible after stabilization?",
-    "options": [
-      "YES",
-      "NO",
-      "UNKNOWN"
-    ]
+    "options": ["Yes", "No", "Unknown"]
   },
   "growthPerformed": {
     "code": "CDSR_GROWTH_ASSESSED",
-    "type": "TEXT",
-    "label": "Was growth assessed?",
-    "options": [
-      "YES",
-      "NO"
-    ]
+    "type": "BOOLEAN",
+    "label": "Was growth assessed?"
   },
   "developmentPerformed": {
     "code": "CDSR_DEVELOPMENT_ASSESSED",
-    "type": "TEXT",
-    "label": "Was development assessed?",
-    "options": [
-      "YES",
-      "NO"
-    ]
+    "type": "BOOLEAN",
+    "label": "Was development assessed?"
   },
   "growthAssessmentTime": {
     "code": "CDSR_GROWTH_ASSESSMENT_DATETIME",
@@ -239,11 +195,7 @@
     "code": "CDSR_APGAR_ASSESSED",
     "type": "TEXT",
     "label": "Was Apgar assessed at one and five minutes?",
-    "options": [
-      "YES",
-      "NO",
-      "UNKNOWN"
-    ]
+    "options": ["Yes", "No", "Unknown"]
   },
   "apgarOne": {
     "code": "CDSR_APGAR_ONE",
@@ -259,21 +211,13 @@
     "code": "CDSR_BIRTH_ASPHYXIA_DOCUMENTED",
     "type": "TEXT",
     "label": "Was birth asphyxia documented?",
-    "options": [
-      "YES",
-      "NO",
-      "UNKNOWN"
-    ]
+    "options": ["Yes", "No", "Unknown"]
   },
   "immediateCry": {
     "code": "CDSR_CRY_IMMEDIATELY",
     "type": "TEXT",
     "label": "Did the child cry immediately after delivery?",
-    "options": [
-      "YES",
-      "NO",
-      "UNKNOWN"
-    ]
+    "options": ["Yes", "No", "Unknown"]
   },
   "birthEvidence": {
     "code": "CDSR_BIRTH_ASPHYXIA_EVIDENCE",
@@ -294,12 +238,7 @@
     "code": "CDSR_HBS_TEST_STATUS",
     "type": "TEXT",
     "label": "HbS / sickle cell investigation status",
-    "options": [
-      "REQUESTED",
-      "DONE",
-      "NOT_DONE",
-      "UNKNOWN"
-    ]
+    "options": ["Requested", "Done", "Not Done", "Unknown"]
   },
   "hbsResult": {
     "code": "CDSR_HBS_TEST_RESULT",
@@ -310,12 +249,7 @@
     "code": "CDSR_GENEXPERT_STATUS",
     "type": "TEXT",
     "label": "GeneXpert investigation status",
-    "options": [
-      "REQUESTED",
-      "DONE",
-      "NOT_DONE",
-      "UNKNOWN"
-    ]
+    "options": ["Requested", "Done", "Not Done", "Unknown"]
   },
   "geneXpertResult": {
     "code": "CDSR_GENEXPERT_RESULT",
@@ -341,7 +275,7 @@
     "code": "CDSR_REFERRAL_FACILITY_TYPE",
     "type": "TEXT",
     "label": "Referring facility type",
-    "options": ["GOVERNMENT", "PNFP", "PRIVATE_CLINIC"]
+    "options": ["Government", "PNFP", "PFP"]
   },
   "criticalStaffDetails": {
     "code": "CDSR_CRITICAL_STAFF_ABSENCE_DETAILS",

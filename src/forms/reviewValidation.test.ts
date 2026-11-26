@@ -18,9 +18,9 @@ test("blocks death before delivery and invalid Apgar on perinatal review", () =>
   const flags = validateReviewForm("pdr", {
     RpkIvgOOZJt: "2026-01-10",
     Dq9aH0aZ2wb: "2026-01-08",
-    RmrshOepF86: 12,
+    NEW_pdr_apgar_1: 12,
   });
   expect(mustCorrectFlags(flags).map((f) => f.field)).toEqual(
-    expect.arrayContaining(["Dq9aH0aZ2wb", "RmrshOepF86"])
+    expect.arrayContaining(["Dq9aH0aZ2wb", "NEW_pdr_apgar_1"])
   );
 });

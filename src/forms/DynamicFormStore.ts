@@ -4,7 +4,7 @@ import { notification } from "antd";
 import { store as mainStore } from "../Store";
 import { FormDefinition } from "./types";
 import { answered, ChildFieldIds, childDateOfDeath, childDerivedValues, childFields, extendChildLayout, isPendingChildField, resolveChildFields, validateChildReview } from "./childReview";
-import { computeSkipState, isYes, maternalPregnancyOutcome } from "./skipLogic";
+import { computeSkipState, isNo, isYes, MDR_ADMISSION, MDR_DEATH, MDR_STAY, maternalPregnancyOutcome, stayDuration } from "./skipLogic";
 import {
   fromDhis2DeId,
   isMappedPendingDe,
@@ -32,7 +32,17 @@ export const MATERNAL_TO_MCCOD_MAP: Record<string, string> = {
   "uFoaTRJ16Ch": "gNM2Yhypydx", // Manner of Death - Accident
   "K4FUK590rIU": "KsGOxFyzIs1", // Manner of Death - Assault
   "AqXDMjrPUEE": "Z41di0TRjIu", // Place of Delivery
-  "js6jQi1rx1j": "jY3K6Bv4o9Q", // Autopsy Requested
+  "NEW_mdr_autopsy_requested": "jY3K6Bv4o9Q", // Autopsy Requested (Yes/No/Unknown)
+};
+
+/** MCH020 place of delivery → MCCOD "Place of delivery" option. */
+export const certificatePlaceOfDelivery = (place: any): string => {
+  const text = String(place ?? "").trim();
+  if (/^tba$/i.test(text)) return "TBA";
+  if (/^home$/i.test(text)) return "Home";
+  if (/on the way|in transit/i.test(text)) return "In Transit";
+  if (/know|^other$/i.test(text)) return "Don't Know";
+  return "Health Facility";
 };
 
 export const CDR_TO_MCCOD_MAP: Record<string, string> = {
@@ -282,16 +292,42 @@ class DynamicFormStore {
         }
       }
       // Alias mapped placeholder keys to the fetched DHIS2 meta so widgets keep
-      // working while layouts still use NEW_* ids.
+      // working while layouts still use NEW_* ids. If the live DE has no option
+      // set yet, keep the catalog fallback choices (blood group, legibility, etc.).
+      const fallback = this.pendingFallbackMeta();
       for (const de of PENDING_DATA_ELEMENTS) {
         const uid = toDhis2DeId(de.placeholder);
         if (uid !== de.placeholder && meta[uid]) {
-          meta[de.placeholder] = { ...meta[uid], id: de.placeholder };
+          const live = meta[uid];
+          const options =
+            live.options && live.options.length
+              ? live.options
+              : fallback[de.placeholder]?.options;
+          meta[uid] = { ...live, options };
+          meta[de.placeholder] = { ...live, id: de.placeholder, options };
+        }
+      }
+
+      // Presentation overrides declared on the layout (date pickers for text
+      // DEs, tick boxes, Yes/No pairs, fixed choice lists).
+      const YES_NO = [{ code: "Yes", name: "Yes" }, { code: "No", name: "No" }];
+      for (const section of def.layout) {
+        for (const group of section.groups) {
+          for (const field of group.fields) {
+            if (!field.widget && !field.options) continue;
+            const base: DeMeta = meta[field.de] ?? { id: field.de, name: field.label, valueType: "TEXT" };
+            let next: DeMeta = { ...base };
+            if (field.widget === "date") next.valueType = "DATE";
+            if (field.widget === "checkbox") next.valueType = "TRUE_ONLY";
+            if (field.widget === "yesNo" || field.widget === "yesNoCheck") next.options = YES_NO;
+            if (field.options) next.options = field.options;
+            meta[field.de] = next;
+          }
         }
       }
 
       runInAction(() => {
-        this.meta = { ...this.pendingFallbackMeta(), ...meta };
+        this.meta = { ...fallback, ...meta };
         this.childFieldIds = resolveChildFields(Object.entries(childFieldIds).map(([key, id]) => ({
           ...meta[id],
           code: childFields[key as keyof ChildFieldIds].code,
@@ -645,6 +681,12 @@ class DynamicFormStore {
     this.mccodEventUid = null;
   };
 
+  /** Replace the choice list for one field (used for cascading address pickers). */
+  @action setFieldOptions = (de: string, options: { code: string; name: string }[]) => {
+    const current: DeMeta = this.meta[de] ?? { id: de, name: de, valueType: "TEXT" };
+    this.meta = { ...this.meta, [de]: { ...current, options } };
+  };
+
   @action setDefaults = (values: Record<string, any>) => {
     this.defaultValues = values;
   };
@@ -689,13 +731,23 @@ class DynamicFormStore {
       }
       values = { ...values, [def.caseNumberField]: savedCase };
     }
-    if (def.id === "mdr" && !answered(values[maternalPregnancyOutcome])) {
-      notification.error({ message: "Select the outcome of pregnancy in Section 5 before saving." });
-      return false;
+    if (def.id === "mdr") {
+      // DHIS2 requires an outcome. When no delivery took place the question is
+      // closed, so record the matching outcome automatically.
+      if (!answered(values[maternalPregnancyOutcome]) && isNo(values, "PbayNOhXnyx", this.meta)) {
+        values = { ...values, [maternalPregnancyOutcome]: "Not Delivered" };
+      }
+      // Stored duration of stay always follows admission and death.
+      const stay = stayDuration(values[MDR_ADMISSION], values[MDR_DEATH]);
+      if (stay) MDR_STAY.forEach((de, i) => { values = { ...values, [de]: stay[i] }; });
+      if (!answered(values[maternalPregnancyOutcome])) {
+        notification.error({ message: "Select the outcome of pregnancy in Section 5 before saving." });
+        return false;
+      }
     }
     if (def.id === "mdr" || def.id === "pdr") {
-      const flags = validateReviewForm(def.id, values, this.meta);
-      const blockers = mustCorrectFlags(flags);
+      const hidden = computeSkipState(def.id, def, values, this.meta).hiddenFields;
+      const blockers = mustCorrectFlags(validateReviewForm(def.id, values, this.meta, hidden));
       if (blockers.length) {
         notification.error({
           message: "Correct the highlighted values before saving",
@@ -703,14 +755,6 @@ class DynamicFormStore {
           duration: 6,
         });
         return false;
-      }
-      const confirms = flags.filter((f) => f.type === "confirm");
-      if (confirms.length) {
-        notification.warning({
-          message: "Please confirm unusual values",
-          description: confirms.map((f) => f.message).join(" "),
-          duration: 5,
-        });
       }
     }
     if (def.id === "cdr") {
@@ -811,6 +855,23 @@ class DynamicFormStore {
           if (typeof out === "boolean") out = out ? "true" : "false";
           return { dataElement, value: out };
         });
+
+      // An answer that was cleared (or closed by skip logic) must also leave
+      // DHIS2: send an explicit delete for each stored value now empty.
+      if ((def.id === "mdr" || def.id === "pdr") && existingEventUid) {
+        const sending = new Set(dataValues.map((entry: any) => entry.dataElement));
+        for (const [key, v] of Object.entries(values)) {
+          const empty = v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0);
+          if (!empty || key === def.caseNumberField) continue;
+          if (isPendingChildField(key) || (key.startsWith("NEW_") && !isMappedPendingDe(key))) continue;
+          const dataElement = toDhis2DeId(key);
+          if (sending.has(dataElement)) continue;
+          if (this.stageDataElements.size > 0 && !this.stageDataElements.has(dataElement)) continue;
+          const stored = this.recordValue(this.currentEvent, dataElement);
+          if (stored === undefined || stored === null || stored === "") continue;
+          dataValues.push({ dataElement, value: null });
+        }
+      }
 
       const event: any = {
         program: this.program,
@@ -927,6 +988,9 @@ class DynamicFormStore {
               }
             }
             if (typeof out === "boolean") out = out ? "true" : "false";
+            // MCH020 place of delivery lists facility levels and community
+            // choices; the certificate keeps the five broad places.
+            if (mccodDe === "Z41di0TRjIu" && def.id === "mdr") out = certificatePlaceOfDelivery(out);
 
             mccodDataValues.push({ dataElement: mccodDe, value: out });
           }
